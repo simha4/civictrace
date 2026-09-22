@@ -6,9 +6,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:foundry": "tsx scripts/test-foundry.ts",
+    "test:policy": "tsx scripts/test-policy-analysis.ts"
   },
   "dependencies": {
+    "@azure/ai-projects": "^2.7.0",
+    "@azure/identity": "^4.13.3",
+    "dotenv": "^18.0.3",
     "next": "16.3.6",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -22,6 +27,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }

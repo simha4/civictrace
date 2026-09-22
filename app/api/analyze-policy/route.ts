@@ -17,27 +17,42 @@ export async function POST(request: Request) {
 
     if (!policyText || typeof policyText !== "string") {
       return NextResponse.json(
-        { error: "policyText is required" },
-        { status: 400 }
+        {
+          error: "policyText is required",
+        },
+        {
+          status: 400,
+        }
       );
     }
 
     const prompt = `
-Analyze the following policy requirement.
+You are CivicTrace, an evidence-grounded policy analysis assistant.
 
-Return ONLY valid JSON in this exact structure:
+Analyze the policy text below.
+
+Return ONLY valid JSON.
+
+Use exactly this structure:
 
 {
-  "claim": "string",
-  "stakeholders": ["string"],
-  "confidence": "high | medium | low",
-  "evidence": ["string"]
+  "claim": "A concise explanation of what the policy requires or changes",
+  "stakeholders": ["Stakeholder 1", "Stakeholder 2"],
+  "confidence": "high",
+  "evidence": ["Exact supporting policy language"]
 }
 
-Do not invent facts.
-Only use information supported by the provided policy text.
+Rules:
+- Do not invent information.
+- Only make claims supported by the supplied policy text.
+- Identify only stakeholders reasonably affected by the text.
+- confidence must be exactly "high", "medium", or "low".
+- Evidence should contain text taken directly from the supplied policy.
+- Do not include markdown.
+- Do not wrap the JSON in code fences.
 
-Policy text:
+POLICY TEXT:
+
 ${policyText}
 `;
 
@@ -51,15 +66,23 @@ ${policyText}
 
     const parsed = JSON.parse(cleaned);
 
-    const validated = PolicyAnalysisSchema.parse(parsed);
+    const validated =
+      PolicyAnalysisSchema.parse(parsed);
 
     return NextResponse.json(validated);
   } catch (error) {
-    console.error(error);
+    console.error(
+      "Policy analysis error:",
+      error
+    );
 
     return NextResponse.json(
-      { error: "Policy analysis failed" },
-      { status: 500 }
+      {
+        error: "Policy analysis failed",
+      },
+      {
+        status: 500,
+      }
     );
   }
 }

@@ -6,13 +6,13 @@ const model = process.env.FOUNDRY_MODEL_NAME;
 
 if (!endpoint) {
   throw new Error(
-    "FOUNDRY_PROJECT_ENDPOINT is missing from .env.local"
+    "FOUNDRY_PROJECT_ENDPOINT is missing from environment variables"
   );
 }
 
 if (!model) {
   throw new Error(
-    "FOUNDRY_MODEL_NAME is missing from .env.local"
+    "FOUNDRY_MODEL_NAME is missing from environment variables"
   );
 }
 

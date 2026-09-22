@@ -10,9 +10,21 @@ const PageSchema = z.object({
 const DocumentAnalysisSchema = z.object({
   summary: z.string(),
 
-  stakeholders: z.array(z.string()),
+  stakeholderGroups: z.array(z.string()),
 
-  keyRequirements: z.array(z.string()),
+  requirements: z.array(
+    z.object({
+      statement: z.string(),
+      evidenceIds: z.array(z.string()),
+    })
+  ),
+
+  facts: z.array(
+    z.object({
+      statement: z.string(),
+      evidenceIds: z.array(z.string()),
+    })
+  ),
 
   confidence: z.enum([
     "high",
@@ -20,67 +32,85 @@ const DocumentAnalysisSchema = z.object({
     "low",
   ]),
 
-  evidence: z.array(
-    z.object({
-      pageNumber: z.number(),
-      quote: z.string(),
-    })
-  ),
+  limitations: z.array(z.string()),
 });
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    const pages = z.array(PageSchema).parse(body.pages);
+    const pages =
+      z.array(PageSchema).parse(body.pages);
 
     if (pages.length === 0) {
       return NextResponse.json(
-        { error: "Document pages are required" },
-        { status: 400 }
+        {
+          error: "Document pages are required",
+        },
+        {
+          status: 400,
+        }
       );
     }
 
-    const documentText = pages
+    const evidence = pages.map((page) => ({
+      id: `page-${page.pageNumber}`,
+      pageNumber: page.pageNumber,
+      text: page.text,
+    }));
+
+    const documentText = evidence
       .map(
-        (page) =>
-          `--- PAGE ${page.pageNumber} ---\n${page.text}`
+        (item) =>
+          `EVIDENCE ID: ${item.id}\n` +
+          `PAGE: ${item.pageNumber}\n` +
+          `${item.text}`
       )
-      .join("\n\n");
+      .join("\n\n---\n\n");
 
     const prompt = `
 You are CivicTrace, an evidence-grounded policy analysis assistant.
 
-Analyze the following document.
+Analyze the document evidence below.
 
-Return ONLY valid JSON using exactly this structure:
+Return ONLY valid JSON in exactly this structure:
 
 {
   "summary": "Concise neutral summary",
-  "stakeholders": ["Stakeholder 1"],
-  "keyRequirements": ["Requirement 1"],
-  "confidence": "high",
-  "evidence": [
+  "stakeholderGroups": [
+    "Stakeholder group"
+  ],
+  "requirements": [
     {
-      "pageNumber": 1,
-      "quote": "Exact supporting text"
+      "statement": "Requirement",
+      "evidenceIds": ["page-1"]
     }
-  ]
+  ],
+  "facts": [
+    {
+      "statement": "Document fact",
+      "evidenceIds": ["page-2"]
+    }
+  ],
+  "confidence": "high",
+  "limitations": []
 }
 
 Rules:
-- Use only information contained in the supplied document.
-- Do not invent facts.
+- Use only information supplied below.
+- Do not invent evidence IDs.
+- evidenceIds must exactly match the EVIDENCE ID values provided.
+- Do not generate page numbers.
+- Do not generate quotations.
+- Classify obligations or expected actions as requirements.
+- Classify descriptive information as facts.
+- Stakeholders should generally be groups, not individual names.
 - Keep the summary neutral.
-- Identify stakeholders only when supported by the document.
-- Every important conclusion should be grounded in evidence.
-- Evidence quotes must be copied from the supplied document.
-- pageNumber must match the page where the quote appears.
 - confidence must be "high", "medium", or "low".
 - Return JSON only.
 - Do not use markdown code fences.
 
-DOCUMENT:
+DOCUMENT EVIDENCE:
 
 ${documentText}
 `;
@@ -98,7 +128,42 @@ ${documentText}
     const validated =
       DocumentAnalysisSchema.parse(parsed);
 
-    return NextResponse.json(validated);
+    const validEvidenceIds =
+      new Set(evidence.map((item) => item.id));
+
+    const validateIds = (
+      ids: string[]
+    ) =>
+      ids.filter((id) =>
+        validEvidenceIds.has(id)
+      );
+
+    const requirements =
+      validated.requirements.map((item) => ({
+        ...item,
+        evidenceIds: validateIds(
+          item.evidenceIds
+        ),
+      }));
+
+    const facts =
+      validated.facts.map((item) => ({
+        ...item,
+        evidenceIds: validateIds(
+          item.evidenceIds
+        ),
+      }));
+
+    return NextResponse.json({
+      summary: validated.summary,
+      stakeholderGroups:
+        validated.stakeholderGroups,
+      requirements,
+      facts,
+      confidence: validated.confidence,
+      limitations: validated.limitations,
+      evidence,
+    });
   } catch (error) {
     console.error(
       "Document analysis error:",
@@ -107,7 +172,8 @@ ${documentText}
 
     return NextResponse.json(
       {
-        error: "Document analysis failed",
+        error:
+          "Document analysis failed",
       },
       {
         status: 500,

@@ -15,27 +15,29 @@ type UploadResult = {
   pageCount: number;
 };
 
+type Evidence = {
+  id: string;
+  pageNumber: number;
+  text: string;
+};
+
+type AnalysisItem = {
+  statement: string;
+  evidenceIds: string[];
+};
+
 type DocumentAnalysis = {
   summary: string;
-
-  stakeholders: string[];
-
-  keyRequirements: string[];
-
-  confidence:
-    | "high"
-    | "medium"
-    | "low";
-
-  evidence: {
-    pageNumber: number;
-    quote: string;
-  }[];
+  stakeholderGroups: string[];
+  requirements: AnalysisItem[];
+  facts: AnalysisItem[];
+  confidence: "high" | "medium" | "low";
+  limitations: string[];
+  evidence: Evidence[];
 };
 
 export default function PolicyUploader() {
-  const [file, setFile] =
-    useState<File | null>(null);
+  const [file, setFile] = useState<File | null>(null);
 
   const [result, setResult] =
     useState<UploadResult | null>(null);
@@ -59,8 +61,7 @@ export default function PolicyUploader() {
 
     try {
       // STEP 1:
-      // Upload PDF to Azure Document Intelligence
-
+      // Upload PDF and extract page-aware content
       const formData = new FormData();
 
       formData.append("file", file);
@@ -86,8 +87,7 @@ export default function PolicyUploader() {
       setResult(uploadData);
 
       // STEP 2:
-      // Send extracted pages to Microsoft Foundry
-
+      // Send extracted pages to Foundry
       const analysisResponse = await fetch(
         "/api/analyze-document",
         {
@@ -128,6 +128,21 @@ export default function PolicyUploader() {
     }
   }
 
+  function getEvidenceForItem(
+    item: AnalysisItem
+  ) {
+    if (!analysis) {
+      return [];
+    }
+
+    return analysis.evidence.filter(
+      (evidence) =>
+        item.evidenceIds.includes(
+          evidence.id
+        )
+    );
+  }
+
   return (
     <section className="rounded-xl border bg-white p-6 shadow-sm">
       <p className="text-sm font-semibold uppercase tracking-wide text-blue-600">
@@ -140,9 +155,10 @@ export default function PolicyUploader() {
 
       <p className="mt-2 text-sm text-gray-600">
         Upload a PDF. Azure Document
-        Intelligence extracts the document,
-        then Microsoft Foundry generates
-        evidence-grounded policy insights.
+        Intelligence extracts page-aware
+        evidence, and Microsoft Foundry
+        analyzes the document using verified
+        evidence references.
       </p>
 
       <input
@@ -206,7 +222,8 @@ export default function PolicyUploader() {
       )}
 
       {analysis && (
-        <div className="mt-8 space-y-6">
+        <div className="mt-8 space-y-8">
+          {/* SUMMARY */}
           <div className="rounded-xl border bg-blue-50 p-5">
             <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
               AI-generated interpretation
@@ -221,13 +238,14 @@ export default function PolicyUploader() {
             </p>
           </div>
 
+          {/* STAKEHOLDERS */}
           <div>
-            <h3 className="font-semibold">
-              Affected Stakeholders
+            <h3 className="text-lg font-semibold">
+              Affected Stakeholder Groups
             </h3>
 
             <div className="mt-3 flex flex-wrap gap-2">
-              {analysis.stakeholders.map(
+              {analysis.stakeholderGroups.map(
                 (stakeholder) => (
                   <span
                     key={stakeholder}
@@ -240,24 +258,136 @@ export default function PolicyUploader() {
             </div>
           </div>
 
+          {/* REQUIREMENTS */}
           <div>
-            <h3 className="font-semibold">
-              Key Requirements
+            <h3 className="text-lg font-semibold">
+              Requirements
             </h3>
 
-            <ul className="mt-3 list-disc space-y-2 pl-6">
-              {analysis.keyRequirements.map(
-                (requirement, index) => (
-                  <li key={index}>
-                    {requirement}
-                  </li>
-                )
+            <div className="mt-4 space-y-5">
+              {analysis.requirements.map(
+                (item, index) => {
+                  const evidenceForItem =
+                    getEvidenceForItem(
+                      item
+                    );
+
+                  return (
+                    <div
+                      key={index}
+                      className="rounded-xl border bg-white p-5"
+                    >
+                      <p className="font-medium">
+                        {item.statement}
+                      </p>
+
+                      <div className="mt-4 space-y-3">
+                        {evidenceForItem.length >
+                        0 ? (
+                          evidenceForItem.map(
+                            (evidence) => (
+                              <div
+                                key={
+                                  evidence.id
+                                }
+                                className="rounded-lg border-l-4 border-blue-500 bg-gray-50 p-4"
+                              >
+                                <p className="text-sm font-semibold text-blue-700">
+                                  Page{" "}
+                                  {
+                                    evidence.pageNumber
+                                  }
+                                </p>
+
+                                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-gray-700">
+                                  {
+                                    evidence.text
+                                  }
+                                </p>
+                              </div>
+                            )
+                          )
+                        ) : (
+                          <p className="text-sm text-red-600">
+                            No verified evidence
+                            found for this
+                            requirement.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
               )}
-            </ul>
+            </div>
           </div>
 
+          {/* FACTS */}
           <div>
-            <h3 className="font-semibold">
+            <h3 className="text-lg font-semibold">
+              Document Facts
+            </h3>
+
+            <div className="mt-4 space-y-5">
+              {analysis.facts.map(
+                (item, index) => {
+                  const evidenceForItem =
+                    getEvidenceForItem(
+                      item
+                    );
+
+                  return (
+                    <div
+                      key={index}
+                      className="rounded-xl border bg-white p-5"
+                    >
+                      <p className="font-medium">
+                        {item.statement}
+                      </p>
+
+                      <div className="mt-4 space-y-3">
+                        {evidenceForItem.length >
+                        0 ? (
+                          evidenceForItem.map(
+                            (evidence) => (
+                              <div
+                                key={
+                                  evidence.id
+                                }
+                                className="rounded-lg border-l-4 border-gray-400 bg-gray-50 p-4"
+                              >
+                                <p className="text-sm font-semibold text-gray-700">
+                                  Page{" "}
+                                  {
+                                    evidence.pageNumber
+                                  }
+                                </p>
+
+                                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-gray-700">
+                                  {
+                                    evidence.text
+                                  }
+                                </p>
+                              </div>
+                            )
+                          )
+                        ) : (
+                          <p className="text-sm text-red-600">
+                            No verified evidence
+                            found for this fact.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+              )}
+            </div>
+          </div>
+
+          {/* CONFIDENCE */}
+          <div>
+            <h3 className="text-lg font-semibold">
               Confidence
             </h3>
 
@@ -266,36 +396,36 @@ export default function PolicyUploader() {
             </p>
           </div>
 
-          <div>
-            <h3 className="font-semibold">
-              Supporting Evidence
-            </h3>
+          {/* LIMITATIONS */}
+          {analysis.limitations.length >
+            0 && (
+            <div>
+              <h3 className="text-lg font-semibold">
+                Limitations
+              </h3>
 
-            <div className="mt-3 space-y-3">
-              {analysis.evidence.map(
-                (evidence, index) => (
-                  <div
-                    key={index}
-                    className="rounded-lg border-l-4 border-blue-500 bg-gray-50 p-4"
-                  >
-                    <p className="text-sm font-semibold text-blue-700">
-                      Page{" "}
-                      {evidence.pageNumber}
-                    </p>
-
-                    <blockquote className="mt-2 text-sm text-gray-700">
-                      “{evidence.quote}”
-                    </blockquote>
-                  </div>
-                )
-              )}
+              <ul className="mt-3 list-disc space-y-2 pl-6 text-sm text-gray-700">
+                {analysis.limitations.map(
+                  (limitation, index) => (
+                    <li key={index}>
+                      {limitation}
+                    </li>
+                  )
+                )}
+              </ul>
             </div>
-          </div>
+          )}
 
+          {/* TRUST NOTICE */}
           <div className="rounded-lg bg-yellow-50 p-4 text-sm text-yellow-900">
             AI-generated interpretation.
-            Analysts should verify conclusions
-            against the original document.
+            Evidence page numbers and text are
+            resolved from Azure Document
+            Intelligence output rather than
+            generated by the language model.
+            Analysts should still verify
+            conclusions against the original
+            document.
           </div>
         </div>
       )}

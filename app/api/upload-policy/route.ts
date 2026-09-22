@@ -5,16 +5,21 @@ import { extractDocument } from
 
 export const runtime = "nodejs";
 
-export async function POST(request: Request) {
+export async function POST(
+  request: Request
+) {
   try {
-    const formData = await request.formData();
+    const formData =
+      await request.formData();
 
-    const file = formData.get("file");
+    const file =
+      formData.get("file");
 
     if (!(file instanceof File)) {
       return NextResponse.json(
         {
-          error: "A PDF file is required",
+          error:
+            "A PDF file is required",
         },
         {
           status: 400,
@@ -22,10 +27,14 @@ export async function POST(request: Request) {
       );
     }
 
-    if (file.type !== "application/pdf") {
+    if (
+      file.type !==
+      "application/pdf"
+    ) {
       return NextResponse.json(
         {
-          error: "Only PDF files are supported",
+          error:
+            "Only PDF files are supported",
         },
         {
           status: 400,
@@ -33,8 +42,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Keep uploads small for the MVP.
-    const maxSize = 10 * 1024 * 1024;
+    // 10 MB maximum for hackathon MVP.
+    const maxSize =
+      10 * 1024 * 1024;
 
     if (file.size > maxSize) {
       return NextResponse.json(
@@ -62,9 +72,11 @@ export async function POST(request: Request) {
 
       fileSize: file.size,
 
-      content: extracted.content,
+      content:
+        extracted.content,
 
-      pages: extracted.pages,
+      pages:
+        extracted.pages,
 
       pageCount:
         extracted.pages.length,

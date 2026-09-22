@@ -4,14 +4,20 @@ import DocumentIntelligence, {
   type AnalyzeOperationOutput,
 } from "@azure-rest/ai-document-intelligence";
 
-import { AzureKeyCredential } from "@azure/core-auth";
+import {
+  AzureKeyCredential,
+} from "@azure/core-auth";
 
-export async function extractDocument(file: Buffer) {
+export async function extractDocument(
+  file: Buffer
+) {
   const endpoint =
-    process.env.DOCUMENT_INTELLIGENCE_ENDPOINT;
+    process.env
+      .DOCUMENT_INTELLIGENCE_ENDPOINT;
 
   const key =
-    process.env.DOCUMENT_INTELLIGENCE_API_KEY;
+    process.env
+      .DOCUMENT_INTELLIGENCE_API_KEY;
 
   if (!endpoint) {
     throw new Error(
@@ -25,31 +31,40 @@ export async function extractDocument(file: Buffer) {
     );
   }
 
-  const client = DocumentIntelligence(
-    endpoint,
-    new AzureKeyCredential(key)
-  );
+  const client =
+    DocumentIntelligence(
+      endpoint,
+      new AzureKeyCredential(key)
+    );
 
-  const base64Source = file.toString("base64");
+  const base64Source =
+    file.toString("base64");
 
-  const initialResponse = await client
-    .path(
-      "/documentModels/{modelId}:analyze",
-      "prebuilt-layout"
+  const initialResponse =
+    await client
+      .path(
+        "/documentModels/{modelId}:analyze",
+        "prebuilt-layout"
+      )
+      .post({
+        contentType:
+          "application/json",
+
+        body: {
+          base64Source,
+        },
+
+        queryParameters: {
+          outputContentFormat:
+            "markdown",
+        },
+      });
+
+  if (
+    isUnexpected(
+      initialResponse
     )
-    .post({
-      contentType: "application/json",
-
-      body: {
-        base64Source,
-      },
-
-      queryParameters: {
-        outputContentFormat: "markdown",
-      },
-    });
-
-  if (isUnexpected(initialResponse)) {
+  ) {
     console.error(
       "Document Intelligence error:",
       initialResponse.body
@@ -60,33 +75,47 @@ export async function extractDocument(file: Buffer) {
     );
   }
 
-  const poller = getLongRunningPoller(
-    client,
-    initialResponse
-  );
+  const poller =
+    getLongRunningPoller(
+      client,
+      initialResponse
+    );
 
-  const result = (await poller.pollUntilDone())
-    .body as AnalyzeOperationOutput;
+  const operation =
+    await poller.pollUntilDone();
 
-  if (result.status !== "succeeded") {
+  const result =
+    operation.body as AnalyzeOperationOutput;
+
+  if (
+    result.status !==
+    "succeeded"
+  ) {
     throw new Error(
       `Document analysis status: ${result.status}`
     );
   }
 
   const pages =
-    result.analyzeResult?.pages?.map((page) => ({
-      pageNumber: page.pageNumber,
+    result.analyzeResult?.pages?.map(
+      (page) => ({
+        pageNumber:
+          page.pageNumber,
 
-      text:
-        page.lines
-          ?.map((line) => line.content)
-          .join("\n") ?? "",
-    })) ?? [];
+        text:
+          page.lines
+            ?.map(
+              (line) =>
+                line.content
+            )
+            .join("\n") ?? "",
+      })
+    ) ?? [];
 
   return {
     content:
-      result.analyzeResult?.content ?? "",
+      result.analyzeResult
+        ?.content ?? "",
 
     pages,
   };

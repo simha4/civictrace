@@ -1,5 +1,6 @@
 import PolicyAnalyzer from "../components/policy/PolicyAnalyzer";
 import PolicyWorkspace from "../components/policy/PolicyWorkspace";
+import PublicCommentsAnalyzer from "../components/policy/PublicCommentsAnalyzer";
 import { mockPolicyCase } from "../lib/data/mock-policy-case";
 
 export default function Home() {
@@ -24,12 +25,17 @@ export default function Home() {
           </p>
         </header>
 
-        {/* Upload + Search + Grounded Q&A */}
+        {/* Upload + Index + Grounded Q&A */}
         <PolicyWorkspace />
 
         {/* Raw Text Policy Analyzer */}
         <div className="mt-8">
           <PolicyAnalyzer />
+        </div>
+
+        {/* Public Comment Sentiment Analysis */}
+        <div className="mt-8">
+          <PublicCommentsAnalyzer />
         </div>
 
         {/* Example Demo Case */}
@@ -72,6 +78,7 @@ export default function Home() {
             </div>
           </div>
 
+          {/* Sources */}
           <div className="mt-8">
             <h3 className="text-lg font-semibold">
               Sources
@@ -83,18 +90,27 @@ export default function Home() {
                   key={source.id}
                   className="rounded-xl border border-gray-200 bg-gray-50 p-4"
                 >
-                  <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-gray-600">
-                    {source.type.replaceAll("_", " ")}
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-gray-600">
+                      {source.type.replaceAll("_", " ")}
+                    </span>
+                  </div>
 
                   <p className="mt-3 font-semibold">
                     {source.title}
                   </p>
+
+                  {source.url && (
+                    <p className="mt-2 break-all text-sm text-blue-600">
+                      {source.url}
+                    </p>
+                  )}
                 </article>
               ))}
             </div>
           </div>
 
+          {/* Insights */}
           <div className="mt-8">
             <h3 className="text-lg font-semibold">
               Evidence-grounded Insights
@@ -106,7 +122,7 @@ export default function Home() {
                   key={insight.id}
                   className="rounded-xl border border-gray-200 p-5"
                 >
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
                       {insight.type.replaceAll("_", " ")}
                     </span>
@@ -116,22 +132,61 @@ export default function Home() {
                     </span>
                   </div>
 
-                  <p className="mt-4 leading-7">
+                  <p className="mt-4 font-medium leading-7">
                     {insight.claim}
                   </p>
 
                   {insight.stakeholders.length > 0 && (
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {insight.stakeholders.map(
-                        (stakeholder) => (
+                    <div className="mt-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Stakeholders
+                      </p>
+
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {insight.stakeholders.map((stakeholder) => (
                           <span
                             key={stakeholder}
                             className="rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-700"
                           >
                             {stakeholder}
                           </span>
-                        )
-                      )}
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {insight.evidenceIds.length > 0 && (
+                    <div className="mt-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Evidence IDs
+                      </p>
+
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {insight.evidenceIds.map((evidenceId) => (
+                          <span
+                            key={evidenceId}
+                            className="rounded-full bg-blue-50 px-3 py-1 text-sm text-blue-700"
+                          >
+                            {evidenceId}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {insight.limitations.length > 0 && (
+                    <div className="mt-4 rounded-lg bg-yellow-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-yellow-800">
+                        Limitations
+                      </p>
+
+                      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-yellow-900">
+                        {insight.limitations.map((limitation, index) => (
+                          <li key={index}>
+                            {limitation}
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   )}
                 </article>
@@ -139,6 +194,7 @@ export default function Home() {
             </div>
           </div>
 
+          {/* Evidence Library */}
           <div className="mt-8">
             <h3 className="text-lg font-semibold">
               Evidence Library
@@ -164,6 +220,12 @@ export default function Home() {
                         Page {evidence.page}
                       </span>
                     )}
+
+                    {evidence.speaker && (
+                      <span className="text-sm text-gray-500">
+                        Speaker: {evidence.speaker}
+                      </span>
+                    )}
                   </div>
 
                   <blockquote className="mt-4 border-l-4 border-blue-500 pl-4 text-sm leading-6 text-gray-700">
@@ -174,9 +236,10 @@ export default function Home() {
             </div>
           </div>
 
+          {/* Trust Notice */}
           <div className="mt-8 rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm leading-6 text-yellow-900">
             CivicTrace AI outputs are interpretations of source evidence, not
-            final policy judgments. Analysts should review cited source
+            final policy judgments. Analysts should review the cited source
             material before relying on an insight.
           </div>
         </section>

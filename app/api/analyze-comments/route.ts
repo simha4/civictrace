@@ -34,9 +34,13 @@ const ModelResponseSchema = z.object({
     ClassificationSchema
   ),
 
-  themes: z.array(ThemeSchema),
+  themes: z.array(
+    ThemeSchema
+  ),
 
-  limitations: z.array(z.string()),
+  limitations: z.array(
+    z.string()
+  ),
 });
 
 export async function POST(
@@ -49,23 +53,30 @@ export async function POST(
     const { comments } =
       RequestSchema.parse(body);
 
-    const evidence = comments.map(
-      (comment, index) => ({
-        id: `comment-${index + 1}`,
-        text: comment,
-      })
-    );
+    const evidence =
+      comments.map(
+        (
+          comment,
+          index
+        ) => ({
+          id: `comment-${index + 1}`,
+          text: comment,
+        })
+      );
 
     const evidenceContext =
       evidence
         .map(
           (item) => `
 COMMENT ID: ${item.id}
+
 TEXT:
 ${item.text}
 `
         )
-        .join("\n---\n");
+        .join(
+          "\n---\n"
+        );
 
     const prompt = `
 You are CivicTrace, an evidence-grounded public comment analysis assistant.
@@ -130,7 +141,9 @@ ${evidenceContext}
 `;
 
     const raw =
-      await askFoundry(prompt);
+      await askFoundry(
+        prompt
+      );
 
     const cleaned =
       raw
@@ -149,24 +162,23 @@ ${evidenceContext}
         .trim();
 
     const parsed =
-      JSON.parse(cleaned);
+      JSON.parse(
+        cleaned
+      );
 
     const validated =
-      ModelResponseSchema.parse(parsed);
+      ModelResponseSchema.parse(
+        parsed
+      );
 
     const validIds =
       new Set(
         evidence.map(
-          (item) => item.id
+          (item) =>
+            item.id
         )
       );
 
-    /*
-     * Validate model classifications.
-     *
-     * We only accept classifications whose IDs
-     * actually exist in the supplied comments.
-     */
     const classificationMap =
       new Map<
         string,
@@ -194,29 +206,26 @@ ${evidenceContext}
       }
     }
 
-    /*
-     * Any comment omitted by the model receives
-     * a neutral fallback rather than disappearing.
-     */
     const classifications =
-      evidence.map((item) => {
-        return (
-          classificationMap.get(
-            item.id
-          ) ?? {
-            commentId: item.id,
-            stance: "neutral" as const,
-            concernTags: [],
-          }
-        );
-      });
+      evidence.map(
+        (item) => {
+          return (
+            classificationMap.get(
+              item.id
+            ) ?? {
+              commentId:
+                item.id,
 
-    /*
-     * Compute stance totals on the server.
-     *
-     * The model labels comments, but it does not
-     * generate the aggregate numbers displayed.
-     */
+              stance:
+                "neutral" as const,
+
+              concernTags:
+                [],
+            }
+          );
+        }
+      );
+
     const stanceCounts = {
       support: 0,
       oppose: 0,
@@ -233,49 +242,44 @@ ${evidenceContext}
       ] += 1;
     }
 
-    /*
-     * Validate theme evidence IDs.
-     */
     const themes =
       validated.themes
-        .map((theme) => {
-          const evidenceIds =
-            theme.evidenceIds.filter(
-              (id) =>
-                validIds.has(id)
-            );
-
-          return {
-            label:
-              theme.label,
-
-            summary:
-              theme.summary,
-
-            evidenceIds,
-
-            evidenceCount:
-              evidenceIds.length,
-
-            /*
-             * This is a deterministic
-             * "less common" signal, not
-             * a claim about population
-             * minority status.
-             */
-            lessCommon:
-              evidenceIds.length >
-                0 &&
-              evidenceIds.length <=
-                Math.max(
-                  1,
-                  Math.floor(
-                    comments.length *
-                      0.25
+        .map(
+          (theme) => {
+            const evidenceIds =
+              theme.evidenceIds.filter(
+                (id) =>
+                  validIds.has(
+                    id
                   )
-                ),
-          };
-        })
+              );
+
+            return {
+              label:
+                theme.label,
+
+              summary:
+                theme.summary,
+
+              evidenceIds,
+
+              evidenceCount:
+                evidenceIds.length,
+
+              lessCommon:
+                evidenceIds.length >
+                  0 &&
+                evidenceIds.length <=
+                  Math.max(
+                    1,
+                    Math.floor(
+                      comments.length *
+                        0.25
+                    )
+                  ),
+            };
+          }
+        )
         .filter(
           (theme) =>
             theme.evidenceIds
@@ -283,27 +287,31 @@ ${evidenceContext}
         );
 
     const resolvedEvidence =
-      evidence.map((item) => {
-        const classification =
-          classifications.find(
-            (entry) =>
-              entry.commentId ===
-              item.id
-          );
+      evidence.map(
+        (item) => {
+          const classification =
+            classifications.find(
+              (entry) =>
+                entry.commentId ===
+                item.id
+            );
 
-        return {
-          id: item.id,
-          text: item.text,
+          return {
+            id: item.id,
 
-          stance:
-            classification?.stance ??
-            "neutral",
+            text:
+              item.text,
 
-          concernTags:
-            classification?.concernTags ??
-            [],
-        };
-      });
+            stance:
+              classification?.stance ??
+              "neutral",
+
+            concernTags:
+              classification?.concernTags ??
+              [],
+          };
+        }
+      );
 
     return NextResponse.json({
       sampleSize:

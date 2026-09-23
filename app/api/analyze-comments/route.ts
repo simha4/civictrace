@@ -3,9 +3,22 @@ import { z } from "zod";
 
 import { askFoundry } from "../../../lib/ai/foundry";
 
+import {
+  ensureSearchIndex,
+  uploadEvidence,
+  type EvidenceDocument,
+} from "../../../lib/search/azure-search";
+
 const RequestSchema = z.object({
+  caseId: z
+    .string()
+    .trim()
+    .min(1),
+
   comments: z
-    .array(z.string().trim().min(1))
+    .array(
+      z.string().trim().min(1)
+    )
     .min(1)
     .max(100),
 });
@@ -20,13 +33,17 @@ const ClassificationSchema = z.object({
     "mixed",
   ]),
 
-  concernTags: z.array(z.string()),
+  concernTags: z.array(
+    z.string()
+  ),
 });
 
 const ThemeSchema = z.object({
   label: z.string(),
   summary: z.string(),
-  evidenceIds: z.array(z.string()),
+  evidenceIds: z.array(
+    z.string()
+  ),
 });
 
 const ModelResponseSchema = z.object({
@@ -50,21 +67,25 @@ export async function POST(
     const body =
       await request.json();
 
-    const { comments } =
-      RequestSchema.parse(body);
+    const {
+      caseId,
+      comments,
+    } =
+      RequestSchema.parse(
+        body
+      );
 
     const evidence =
       comments.map(
-        (
-          comment,
-          index
-        ) => ({
+        (comment, index) => ({
           id: `comment-${index + 1}`,
           text: comment,
+          sequenceNumber:
+            index + 1,
         })
       );
 
-    const evidenceContext =
+    const context =
       evidence
         .map(
           (item) => `
@@ -81,63 +102,43 @@ ${item.text}
     const prompt = `
 You are CivicTrace, an evidence-grounded public comment analysis assistant.
 
-Analyze ONLY the public comments supplied below.
+Analyze ONLY the submitted comments.
 
-Return ONLY valid JSON in exactly this shape:
+Return ONLY valid JSON:
 
 {
   "classifications": [
     {
       "commentId": "comment-1",
       "stance": "support",
-      "concernTags": ["cost", "implementation"]
+      "concernTags": ["access"]
     }
   ],
   "themes": [
     {
-      "label": "Implementation cost",
-      "summary": "Several comments raise concerns about implementation costs.",
-      "evidenceIds": ["comment-1", "comment-3"]
+      "label": "Access",
+      "summary": "A submitted comment discusses access.",
+      "evidenceIds": ["comment-1"]
     }
   ],
   "limitations": []
 }
 
-STANCE DEFINITIONS:
+Rules:
 
-- "support":
-  the comment clearly expresses support for the proposal, policy, or action.
-
-- "oppose":
-  the comment clearly expresses opposition.
-
-- "neutral":
-  the comment is informational, unclear, or does not express a clear position.
-
-- "mixed":
-  the comment expresses both support and concern/opposition.
-
-RULES:
-
-- Use only the comments provided below.
+- Use only the supplied comments.
 - Do not use outside knowledge.
-- Do not invent comments.
 - Do not invent COMMENT IDs.
-- Every commentId and evidenceId must exactly match a provided COMMENT ID.
-- Classify every supplied comment exactly once.
-- concernTags should be short neutral topic labels.
-- Themes should represent recurring concerns, benefits, implementation issues, misunderstandings, or other meaningful patterns.
-- Do not claim that these comments represent the broader public.
-- Do not infer demographics or personal characteristics.
-- Do not infer political affiliation.
-- Keep summaries neutral and factual.
-- If the sample is small or ambiguous, mention that in limitations.
+- Classify every comment exactly once.
+- Keep topic labels neutral.
+- Do not infer demographics or political affiliation.
+- Do not claim the sample represents the broader public.
 - Return JSON only.
 - Do not use markdown code fences.
 
-PUBLIC COMMENTS:
+COMMENTS:
 
-${evidenceContext}
+${context}
 `;
 
     const raw =
@@ -161,14 +162,11 @@ ${evidenceContext}
         )
         .trim();
 
-    const parsed =
-      JSON.parse(
-        cleaned
-      );
-
     const validated =
       ModelResponseSchema.parse(
-        parsed
+        JSON.parse(
+          cleaned
+        )
       );
 
     const validIds =
@@ -208,22 +206,19 @@ ${evidenceContext}
 
     const classifications =
       evidence.map(
-        (item) => {
-          return (
-            classificationMap.get(
-              item.id
-            ) ?? {
-              commentId:
-                item.id,
+        (item) =>
+          classificationMap.get(
+            item.id
+          ) ?? {
+            commentId:
+              item.id,
 
-              stance:
-                "neutral" as const,
+            stance:
+              "neutral" as const,
 
-              concernTags:
-                [],
-            }
-          );
-        }
+            concernTags:
+              [],
+          }
       );
 
     const stanceCounts = {
@@ -298,9 +293,7 @@ ${evidenceContext}
 
           return {
             id: item.id,
-
-            text:
-              item.text,
+            text: item.text,
 
             stance:
               classification?.stance ??
@@ -313,24 +306,56 @@ ${evidenceContext}
         }
       );
 
+    /*
+     * Index the raw submitted comments.
+     * Foundry analysis is NOT stored as source evidence.
+     */
+    const searchDocuments: EvidenceDocument[] =
+      evidence.map(
+        (item) => ({
+          id: `${caseId}-${item.id}`,
+
+          caseId,
+
+          sourceType:
+            "public_comment",
+
+          sourceTitle:
+            "Submitted Public Comments",
+
+          sequenceNumber:
+            item.sequenceNumber,
+
+          content:
+            item.text,
+        })
+      );
+
+    await ensureSearchIndex();
+
+    await uploadEvidence(
+      searchDocuments
+    );
+
     return NextResponse.json({
       sampleSize:
         comments.length,
 
       stanceCounts,
 
-      classifications,
-
       themes,
 
       limitations: [
         ...validated.limitations,
 
-        "This analysis describes only the submitted comments and should not be treated as representative of the broader public unless the underlying collection method supports that conclusion.",
+        "This analysis describes only the submitted comments and should not be treated as representative of the broader public unless the collection method supports that conclusion.",
       ],
 
       evidence:
         resolvedEvidence,
+
+      indexedEvidenceCount:
+        searchDocuments.length,
     });
   } catch (error) {
     console.error(
@@ -345,7 +370,7 @@ ${evidenceContext}
       return NextResponse.json(
         {
           error:
-            "comments must contain between 1 and 100 non-empty comments",
+            "caseId and valid comments are required.",
         },
         {
           status: 400,
@@ -356,7 +381,7 @@ ${evidenceContext}
     return NextResponse.json(
       {
         error:
-          "Unable to analyze public comments",
+          "Unable to analyze public comments.",
       },
       {
         status: 500,

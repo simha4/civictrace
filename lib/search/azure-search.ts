@@ -22,9 +22,18 @@ const credential = new DefaultAzureCredential();
 export type EvidenceDocument = {
   id: string;
   caseId: string;
-  sourceType: string;
+
+  sourceType:
+    | "policy"
+    | "public_comment"
+    | "hearing";
+
   sourceTitle: string;
-  pageNumber: number;
+
+  pageNumber?: number;
+  sequenceNumber?: number;
+  speaker?: string;
+
   content: string;
 };
 
@@ -82,6 +91,20 @@ export async function ensureSearchIndex() {
       },
 
       {
+        name: "sequenceNumber",
+        type: "Edm.Int32",
+        filterable: true,
+        sortable: true,
+      },
+
+      {
+        name: "speaker",
+        type: "Edm.String",
+        searchable: true,
+        filterable: true,
+      },
+
+      {
         name: "content",
         type: "Edm.String",
         searchable: true,
@@ -89,9 +112,7 @@ export async function ensureSearchIndex() {
     ],
   };
 
-  await searchIndexClient.createOrUpdateIndex(
-    index
-  );
+  await searchIndexClient.createOrUpdateIndex(index);
 }
 
 export async function uploadEvidence(
@@ -136,16 +157,14 @@ export async function searchEvidence(
   caseId?: string
 ) {
   const filter = caseId
-    ? `caseId eq '${escapeODataString(
-        caseId
-      )}'`
+    ? `caseId eq '${escapeODataString(caseId)}'`
     : undefined;
 
   const results =
     await searchClient.search(
       query,
       {
-        top: 5,
+        top: 8,
         filter,
 
         select: [
@@ -154,13 +173,14 @@ export async function searchEvidence(
           "sourceType",
           "sourceTitle",
           "pageNumber",
+          "sequenceNumber",
+          "speaker",
           "content",
         ],
       }
     );
 
-  const matches: EvidenceDocument[] =
-    [];
+  const matches: EvidenceDocument[] = [];
 
   for await (
     const result of results.results

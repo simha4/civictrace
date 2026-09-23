@@ -45,7 +45,6 @@ export async function POST(
     } =
       RequestSchema.parse(body);
 
-    // Search only evidence belonging to this uploaded case.
     const matches =
       await searchEvidence(
         question,
@@ -57,14 +56,14 @@ export async function POST(
     ) {
       return NextResponse.json({
         answer:
-          "I could not find enough supporting evidence in this uploaded document to answer the question.",
+          "I could not find enough supporting evidence in this CivicTrace case to answer the question.",
 
         confidence: "low",
 
         evidenceIds: [],
 
         limitations: [
-          "No relevant evidence was retrieved from Azure AI Search for this document.",
+          "No relevant evidence was retrieved from Azure AI Search for this case.",
         ],
 
         evidence: [],
@@ -76,9 +75,11 @@ export async function POST(
         .map(
           (item) => `
 EVIDENCE ID: ${item.id}
-SOURCE: ${item.sourceTitle}
 SOURCE TYPE: ${item.sourceType}
-PAGE: ${item.pageNumber}
+SOURCE TITLE: ${item.sourceTitle}
+PAGE: ${item.pageNumber ?? "N/A"}
+SEQUENCE: ${item.sequenceNumber ?? "N/A"}
+SPEAKER: ${item.speaker ?? "N/A"}
 
 TEXT:
 ${item.content}
@@ -89,9 +90,14 @@ ${item.content}
         );
 
     const prompt = `
-You are CivicTrace, an evidence-grounded policy analysis assistant.
+You are CivicTrace, an evidence-grounded policy and public sentiment analysis assistant.
 
 Answer the user's question using ONLY the retrieved evidence below.
+
+The evidence may come from:
+- policy documents
+- submitted public comments
+- public hearing testimony
 
 Return ONLY valid JSON using exactly this structure:
 
@@ -109,10 +115,14 @@ Rules:
 - Do not invent facts.
 - Do not invent quotations.
 - Do not invent page numbers.
+- Do not invent comment numbers.
+- Do not invent speakers.
 - Do not invent evidence IDs.
 - Every evidence ID must exactly match an EVIDENCE ID supplied below.
 - Cite only evidence that actually supports the answer.
-- If evidence is incomplete or ambiguous, state that clearly.
+- Clearly distinguish policy text from submitted public comments and hearing testimony when relevant.
+- Do not claim submitted comments or hearing speakers represent the broader public.
+- If evidence is incomplete, conflicting, or ambiguous, state that clearly.
 - Keep the answer neutral and factual.
 - confidence must be exactly "high", "medium", or "low".
 - Return JSON only.
@@ -149,15 +159,15 @@ ${evidenceContext}
         .trim();
 
     const parsed =
-      JSON.parse(cleaned);
+      JSON.parse(
+        cleaned
+      );
 
     const validated =
       AnswerSchema.parse(
         parsed
       );
 
-    // Never trust the model to create evidence references.
-    // Only IDs actually retrieved from Search are permitted.
     const validIds =
       new Set(
         matches.map(
@@ -169,11 +179,11 @@ ${evidenceContext}
     const evidenceIds =
       validated.evidenceIds.filter(
         (id) =>
-          validIds.has(id)
+          validIds.has(
+            id
+          )
       );
 
-    // Resolve evidence using Azure Search results,
-    // not model-generated page text.
     const evidence =
       matches
         .filter((item) =>
@@ -183,15 +193,27 @@ ${evidenceContext}
         )
         .map(
           (item) => ({
-            id: item.id,
+            id:
+              item.id,
+
             caseId:
               item.caseId,
+
             sourceTitle:
               item.sourceTitle,
+
             sourceType:
               item.sourceType,
+
             pageNumber:
               item.pageNumber,
+
+            sequenceNumber:
+              item.sequenceNumber,
+
+            speaker:
+              item.speaker,
+
             content:
               item.content,
           })

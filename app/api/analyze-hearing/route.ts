@@ -3,6 +3,12 @@ import { z } from "zod";
 
 import { askFoundry } from "../../../lib/ai/foundry";
 
+import {
+  ensureSearchIndex,
+  uploadEvidence,
+  type EvidenceDocument,
+} from "../../../lib/search/azure-search";
+
 const TranscriptItemSchema = z.object({
   id: z.string(),
   speaker: z.string(),
@@ -10,30 +16,30 @@ const TranscriptItemSchema = z.object({
 });
 
 const RequestSchema = z.object({
+  caseId: z
+    .string()
+    .trim()
+    .min(1),
+
   transcript: z
     .array(TranscriptItemSchema)
     .min(1)
     .max(200),
 });
 
-const InsightSchema = z.object({
-  type: z.enum([
-    "concern",
-    "support",
-    "question",
-    "implementation_issue",
-    "possible_misunderstanding",
-    "other",
-  ]),
+const AllowedInsightTypes = [
+  "concern",
+  "support",
+  "question",
+  "implementation_issue",
+  "possible_misunderstanding",
+  "other",
+] as const;
 
-  claim: z.string(),
+type InsightType =
+  (typeof AllowedInsightTypes)[number];
 
-  evidenceIds: z.array(
-    z.string()
-  ),
-});
-
-const ModelResponseSchema = z.object({
+const RawModelResponseSchema = z.object({
   summary: z.string(),
 
   themes: z.array(
@@ -47,13 +53,39 @@ const ModelResponseSchema = z.object({
   ),
 
   insights: z.array(
-    InsightSchema
+    z.object({
+      type: z.string(),
+      claim: z.string(),
+      evidenceIds: z.array(
+        z.string()
+      ),
+    })
   ),
 
   limitations: z.array(
     z.string()
   ),
 });
+
+function normalizeInsightType(
+  value: string
+): InsightType {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/-/g, "_");
+
+  if (
+    AllowedInsightTypes.includes(
+      normalized as InsightType
+    )
+  ) {
+    return normalized as InsightType;
+  }
+
+  return "other";
+}
 
 export async function POST(
   request: Request
@@ -62,7 +94,10 @@ export async function POST(
     const body =
       await request.json();
 
-    const { transcript } =
+    const {
+      caseId,
+      transcript,
+    } =
       RequestSchema.parse(
         body
       );
@@ -75,7 +110,7 @@ export async function POST(
         )
       );
 
-    const evidenceContext =
+    const context =
       transcript
         .map(
           (item) => `
@@ -93,49 +128,55 @@ ${item.text}
     const prompt = `
 You are CivicTrace, an evidence-grounded public hearing analysis assistant.
 
-Analyze ONLY the hearing testimony supplied below.
+Analyze ONLY the supplied testimony.
 
-Return ONLY valid JSON in exactly this shape:
+Return ONLY valid JSON:
 
 {
-  "summary": "Neutral summary of the hearing testimony",
+  "summary": "Neutral summary",
   "themes": [
     {
       "label": "Implementation cost",
-      "summary": "Some speakers raised concerns about implementation costs.",
+      "summary": "A speaker raised implementation cost concerns.",
       "evidenceIds": ["hearing-2"]
     }
   ],
   "insights": [
     {
       "type": "concern",
-      "claim": "A speaker raised concerns about implementation cost.",
+      "claim": "A speaker raised implementation cost concerns.",
       "evidenceIds": ["hearing-2"]
     }
   ],
   "limitations": []
 }
 
+Allowed insight type values are EXACTLY:
+
+- concern
+- support
+- question
+- implementation_issue
+- possible_misunderstanding
+- other
+
 Rules:
 
-- Use only the supplied hearing testimony.
+- Use only supplied testimony.
 - Do not use outside knowledge.
 - Do not invent speakers.
-- Do not invent quotations.
 - Do not invent evidence IDs.
-- evidenceIds must exactly match supplied EVIDENCE ID values.
-- Keep claims neutral and factual.
-- Do not infer demographics, political affiliation, motives, or identity.
-- Do not claim the speakers represent the broader public.
-- Distinguish questions, concerns, support, and implementation issues.
-- A possible misunderstanding should only be identified when the testimony itself provides enough evidence to justify that interpretation.
-- If the sample is small or incomplete, mention that in limitations.
+- Keep claims neutral.
+- Do not infer demographics, affiliation, motives, or identity.
+- Do not claim speakers represent the broader public.
+- insight.type MUST be one of the allowed values listed above.
+- If no allowed type fits, use "other".
 - Return JSON only.
-- Do not use markdown code fences.
+- Do not use markdown fences.
 
-HEARING TESTIMONY:
+TESTIMONY:
 
-${evidenceContext}
+${context}
 `;
 
     const raw =
@@ -165,7 +206,7 @@ ${evidenceContext}
       );
 
     const validated =
-      ModelResponseSchema.parse(
+      RawModelResponseSchema.parse(
         parsed
       );
 
@@ -194,7 +235,13 @@ ${evidenceContext}
       validated.insights
         .map(
           (insight) => ({
-            ...insight,
+            type:
+              normalizeInsightType(
+                insight.type
+              ),
+
+            claim:
+              insight.claim,
 
             evidenceIds:
               insight.evidenceIds.filter(
@@ -210,6 +257,39 @@ ${evidenceContext}
             insight.evidenceIds
               .length > 0
         );
+
+    const searchDocuments: EvidenceDocument[] =
+      transcript.map(
+        (
+          item,
+          index
+        ) => ({
+          id: `${caseId}-${item.id}`,
+
+          caseId,
+
+          sourceType:
+            "hearing",
+
+          sourceTitle:
+            "Public Hearing Transcript",
+
+          sequenceNumber:
+            index + 1,
+
+          speaker:
+            item.speaker,
+
+          content:
+            item.text,
+        })
+      );
+
+    await ensureSearchIndex();
+
+    await uploadEvidence(
+      searchDocuments
+    );
 
     return NextResponse.json({
       summary:
@@ -227,6 +307,9 @@ ${evidenceContext}
 
       evidence:
         transcript,
+
+      indexedEvidenceCount:
+        searchDocuments.length,
     });
   } catch (error) {
     console.error(
@@ -241,7 +324,7 @@ ${evidenceContext}
       return NextResponse.json(
         {
           error:
-            "Invalid hearing transcript data.",
+            "Invalid hearing analysis response or transcript data.",
         },
         {
           status: 400,

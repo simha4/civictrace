@@ -6,8 +6,10 @@ type Evidence = {
   id: string;
   caseId: string;
   sourceTitle: string;
-  sourceType: string;
-  pageNumber: number;
+  sourceType: "policy" | "public_comment" | "hearing";
+  pageNumber?: number;
+  sequenceNumber?: number;
+  speaker?: string;
   content: string;
 };
 
@@ -47,11 +49,9 @@ export default function PolicyQA({
     try {
       const response = await fetch("/api/ask-policy", {
         method: "POST",
-
         headers: {
           "Content-Type": "application/json",
         },
-
         body: JSON.stringify({
           question: trimmedQuestion,
           caseId,
@@ -84,7 +84,6 @@ export default function PolicyQA({
     event: React.FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
-
     await askQuestion();
   }
 
@@ -102,6 +101,52 @@ export default function PolicyQA({
     return "bg-red-100 text-red-800";
   }
 
+  function sourceTypeLabel(sourceType: Evidence["sourceType"]) {
+    if (sourceType === "policy") {
+      return "Policy document";
+    }
+
+    if (sourceType === "public_comment") {
+      return "Public comment";
+    }
+
+    return "Hearing testimony";
+  }
+
+  function evidenceLocationLabel(evidence: Evidence) {
+    if (
+      evidence.sourceType === "policy" &&
+      typeof evidence.pageNumber === "number"
+    ) {
+      return `Page ${evidence.pageNumber}`;
+    }
+
+    if (
+      evidence.sourceType === "public_comment" &&
+      typeof evidence.sequenceNumber === "number"
+    ) {
+      return `Comment ${evidence.sequenceNumber}`;
+    }
+
+    if (evidence.sourceType === "hearing") {
+      const parts: string[] = [];
+
+      if (evidence.speaker) {
+        parts.push(evidence.speaker);
+      }
+
+      if (typeof evidence.sequenceNumber === "number") {
+        parts.push(`Statement ${evidence.sequenceNumber}`);
+      }
+
+      if (parts.length > 0) {
+        return parts.join(" · ");
+      }
+    }
+
+    return "Source evidence";
+  }
+
   return (
     <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
       <p className="text-sm font-semibold uppercase tracking-wide text-blue-600">
@@ -113,17 +158,18 @@ export default function PolicyQA({
       </h2>
 
       {caseId ? (
-        <div className="mt-3 rounded-lg bg-green-50 p-3 text-sm text-green-800">
-          Searching evidence from{" "}
+        <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+          Searching all evidence in the current CivicTrace case, anchored to{" "}
           <span className="font-semibold">
-            {sourceTitle ?? "the uploaded document"}
+            {sourceTitle ?? "the uploaded policy document"}
           </span>
           .
         </div>
       ) : (
-        <div className="mt-3 rounded-lg bg-yellow-50 p-3 text-sm text-yellow-900">
-          Upload a policy PDF first. CivicTrace will automatically index its
-          evidence and enable grounded questions here.
+        <div className="mt-3 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900">
+          Upload a policy PDF first. CivicTrace will create a case and enable
+          grounded questions across policy evidence, public comments, and
+          hearing testimony.
         </div>
       )}
 
@@ -145,7 +191,7 @@ export default function PolicyQA({
             setQuestion(event.target.value)
           }
           disabled={!caseId}
-          placeholder="Example: What are students expected to do?"
+          placeholder="Example: What implementation concerns appear across the policy case and public feedback?"
           className="mt-2 min-h-28 w-full rounded-xl border border-gray-300 p-4 outline-none focus:border-blue-500 disabled:bg-gray-100"
         />
 
@@ -187,7 +233,7 @@ export default function PolicyQA({
               </span>
             </div>
 
-            <p className="mt-3 leading-7">
+            <p className="mt-3 leading-7 text-gray-900">
               {result.answer}
             </p>
           </div>
@@ -198,8 +244,8 @@ export default function PolicyQA({
             </h3>
 
             <p className="mt-1 text-sm text-gray-600">
-              These passages were retrieved from the currently selected
-              document before Foundry generated the answer.
+              These passages were retrieved from the current CivicTrace case
+              before Foundry generated the answer.
             </p>
 
             <div className="mt-4 space-y-4">
@@ -211,16 +257,20 @@ export default function PolicyQA({
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
-                        Page {evidence.pageNumber}
+                        {sourceTypeLabel(evidence.sourceType)}
                       </span>
 
-                      <span className="text-sm font-semibold">
+                      <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-700">
+                        {evidenceLocationLabel(evidence)}
+                      </span>
+
+                      <span className="text-sm font-semibold text-gray-900">
                         {evidence.sourceTitle}
                       </span>
                     </div>
 
                     <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      {evidence.sourceType}
+                      {evidence.sourceType.replaceAll("_", " ")}
                     </p>
 
                     <blockquote className="mt-4 whitespace-pre-wrap border-l-4 border-blue-500 pl-4 text-sm leading-6 text-gray-700">
@@ -256,9 +306,10 @@ export default function PolicyQA({
 
           <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm leading-6 text-gray-600">
             AI-generated interpretation. CivicTrace retrieves evidence through
-            Azure AI Search before asking Microsoft Foundry to answer. Evidence
-            text and page references come from indexed source material rather
-            than being generated by the language model.
+            Azure AI Search before asking Microsoft Foundry to answer. Source
+            labels, page numbers, comment numbers, speaker names, and evidence
+            text come from indexed source material rather than being generated
+            by the language model.
           </div>
         </div>
       )}

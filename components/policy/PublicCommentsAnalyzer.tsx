@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 
+type PublicCommentsAnalyzerProps = {
+  caseId: string | null;
+};
+
 type Stance =
   | "support"
   | "oppose"
@@ -38,32 +42,22 @@ type CommentAnalysis = {
   limitations: string[];
 
   evidence: Evidence[];
+
+  indexedEvidenceCount?: number;
 };
 
-export default function PublicCommentsAnalyzer() {
-  const [
-    commentsText,
-    setCommentsText,
-  ] = useState("");
+export default function PublicCommentsAnalyzer({
+  caseId,
+}: PublicCommentsAnalyzerProps) {
+  const [commentsText, setCommentsText] = useState("");
 
-  const [
-    analysis,
-    setAnalysis,
-  ] =
-    useState<CommentAnalysis | null>(
-      null
-    );
+  const [analysis, setAnalysis] =
+    useState<CommentAnalysis | null>(null);
 
-  const [
-    loading,
-    setLoading,
-  ] =
+  const [loading, setLoading] =
     useState(false);
 
-  const [
-    error,
-    setError,
-  ] =
+  const [error, setError] =
     useState("");
 
   function parseComments() {
@@ -74,6 +68,12 @@ export default function PublicCommentsAnalyzer() {
       )
       .filter(Boolean);
   }
+
+  const comments =
+    parseComments();
+
+  const commentCount =
+    comments.length;
 
   function getEvidenceForTheme(
     theme: Theme
@@ -109,10 +109,8 @@ export default function PublicCommentsAnalyzer() {
   }
 
   async function handleAnalyze() {
-    const comments =
-      parseComments();
-
     if (
+      !caseId ||
       comments.length === 0
     ) {
       return;
@@ -135,6 +133,7 @@ export default function PublicCommentsAnalyzer() {
             },
 
             body: JSON.stringify({
+              caseId,
               comments,
             }),
           }
@@ -167,9 +166,6 @@ export default function PublicCommentsAnalyzer() {
     }
   }
 
-  const commentCount =
-    parseComments().length;
-
   return (
     <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
       <div>
@@ -182,11 +178,25 @@ export default function PublicCommentsAnalyzer() {
         </h2>
 
         <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
-          Paste one public comment per line. CivicTrace classifies expressed
-          stance, detects recurring concerns, and keeps each interpretation
-          linked to the exact submitted comments.
+          Paste one public comment per line. Each non-empty line is treated as
+          a separate comment. CivicTrace classifies expressed stance, detects
+          recurring concerns, and links every interpretation back to the exact
+          submitted comment.
         </p>
       </div>
+
+      {!caseId && (
+        <div className="mt-4 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900">
+          Upload a policy PDF first so these comments can be linked to the same
+          CivicTrace case and indexed together in Azure AI Search.
+        </div>
+      )}
+
+      {caseId && (
+        <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+          These comments will be added to the current CivicTrace case.
+        </div>
+      )}
 
       <textarea
         value={commentsText}
@@ -195,15 +205,17 @@ export default function PublicCommentsAnalyzer() {
             event.target.value
           )
         }
-        placeholder={`I support the proposal because it improves access.
-The implementation cost is too high for small organizations.
-I support the goal, but the compliance deadline is unrealistic.
-I need more information before deciding.`}
-        className="mt-6 min-h-48 w-full rounded-xl border border-gray-300 p-4 outline-none focus:border-blue-500"
+        disabled={!caseId}
+        placeholder={`I support the proposal because it will improve access to services.
+The policy will be too expensive for small organizations to implement.
+I support the overall goal, but the compliance deadline is too short.
+I need more information about enforcement before deciding whether I support it.`}
+        className="mt-6 min-h-48 w-full rounded-xl border border-gray-300 p-4 outline-none focus:border-blue-500 disabled:bg-gray-100"
       />
 
       <div className="mt-3 text-sm text-gray-500">
-        {commentCount} comments detected
+        {commentCount} separate comment
+        {commentCount === 1 ? "" : "s"} detected
       </div>
 
       <button
@@ -212,6 +224,7 @@ I need more information before deciding.`}
           handleAnalyze
         }
         disabled={
+          !caseId ||
           loading ||
           commentCount === 0
         }
@@ -238,12 +251,24 @@ I need more information before deciding.`}
             <p className="mt-2 text-sm text-gray-600">
               Analysis covers{" "}
               <span className="font-semibold">
-                {
-                  analysis.sampleSize
-                }
+                {analysis.sampleSize}
               </span>{" "}
               submitted comments.
             </p>
+
+            {typeof analysis.indexedEvidenceCount ===
+              "number" && (
+              <p className="mt-1 text-sm text-green-700">
+                {
+                  analysis.indexedEvidenceCount
+                }{" "}
+                comment evidence item
+                {analysis.indexedEvidenceCount === 1
+                  ? ""
+                  : "s"}{" "}
+                added to Azure AI Search.
+              </p>
+            )}
           </div>
 
           <div>
@@ -316,8 +341,8 @@ I need more information before deciding.`}
             </h3>
 
             <p className="mt-2 text-sm text-gray-600">
-              Every theme is linked back to the submitted comments that
-              support it.
+              Every theme is linked back to the submitted comments that support
+              it.
             </p>
 
             <div className="mt-4 space-y-5">
@@ -338,9 +363,7 @@ I need more information before deciding.`}
                     >
                       <div className="flex flex-wrap items-center gap-2">
                         <h4 className="font-semibold">
-                          {
-                            theme.label
-                          }
+                          {theme.label}
                         </h4>
 
                         <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
@@ -362,9 +385,7 @@ I need more information before deciding.`}
                       </div>
 
                       <p className="mt-3 text-sm leading-6 text-gray-700">
-                        {
-                          theme.summary
-                        }
+                        {theme.summary}
                       </p>
 
                       <div className="mt-5 space-y-3">
@@ -380,9 +401,7 @@ I need more information before deciding.`}
                             >
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="text-xs font-semibold text-blue-700">
-                                  {
-                                    item.id
-                                  }
+                                  {item.id}
                                 </span>
 
                                 <span
@@ -397,9 +416,7 @@ I need more information before deciding.`}
                               </div>
 
                               <blockquote className="mt-3 border-l-4 border-blue-500 pl-4 text-sm leading-6 text-gray-700">
-                                {
-                                  item.text
-                                }
+                                {item.text}
                               </blockquote>
 
                               {item
@@ -417,9 +434,7 @@ I need more information before deciding.`}
                                         }
                                         className="rounded-full bg-white px-2 py-1 text-xs text-gray-600"
                                       >
-                                        {
-                                          tag
-                                        }
+                                        {tag}
                                       </span>
                                     )
                                   )}

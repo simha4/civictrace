@@ -1,6 +1,7 @@
+cat > README.md <<'EOF'
 # CivicTrace
 
-Evidence-grounded policy and public sentiment analysis using Microsoft Foundry, Azure AI Search, and Azure Document Intelligence.
+**Evidence-grounded policy and public sentiment analysis using Microsoft Foundry, Azure AI Search, and Azure Document Intelligence.**
 
 ## Overview
 
@@ -8,9 +9,9 @@ CivicTrace helps analysts review policy documents, public comments, and hearing 
 
 Instead of generating unsupported summaries, CivicTrace links AI-generated claims back to exact source evidence such as:
 
-- policy pages
-- submitted public comments
-- hearing speaker statements
+- Policy pages
+- Submitted public comments
+- Hearing speaker statements
 
 The goal is to make AI-assisted policy analysis more transparent, reviewable, and useful for decision support.
 
@@ -50,80 +51,123 @@ Public Comments    Hearing Testimony
 Q&A     Analysis    Leadership Brief
            ↓
     Evidence Traceability
+```
 
-Technology
-Microsoft Foundry
-Azure AI Search
-Azure AI Document Intelligence
-Microsoft Entra ID / Azure RBAC
-Next.js
-TypeScript
-Tailwind CSS
-Responsible AI
-AI-generated claims are linked to source evidence
-Evidence IDs are validated server-side
-Raw evidence is separated from AI interpretation
-Submitted feedback is not treated as representative of the broader public
-Limitations are displayed explicitly
-Final judgment remains with the analyst
-Demo Workflow
-Upload a policy PDF
-Review extracted policy evidence
-Add public comments
-Add hearing testimony
-Ask questions across all evidence
-Generate a Leadership Brief
-Review supporting evidence
+## Technology
 
-Example:
+- Microsoft Foundry
+- Azure AI Search
+- Azure AI Document Intelligence
+- Microsoft Entra ID / Azure RBAC
+- Next.js
+- TypeScript
+- Tailwind CSS
 
+## Responsible AI
+
+- AI-generated claims are linked to source evidence
+- Evidence IDs are validated server-side
+- Raw evidence is separated from AI interpretation
+- Submitted feedback is not treated as representative of the broader public
+- Limitations are displayed explicitly
+- Final judgment remains with the analyst
+
+## Demo Workflow
+
+1. Upload a policy PDF
+2. Review extracted policy evidence
+3. Add public comments
+4. Add hearing testimony
+5. Ask questions across all evidence
+6. Generate a Leadership Brief
+7. Review supporting evidence
+
+Example question:
+
+```text
 What implementation risks appear across the policy and public feedback?
-Demo Policy
+```
+
+## Demo Policy
+
+```text
 public/demo/CivicTrace_Community_Access_Implementation_Policy.pdf
+```
 
-The fictional demo policy covers public-service access, a six-month implementation timeline, implementation costs, technology readiness, extensions, and enforcement.
+The fictional demo policy covers:
 
-Local Setup
+- Public-service access
+- A six-month implementation timeline
+- Implementation costs
+- Technology readiness
+- Extension requests
+- Enforcement and corrective action
+
+## Local Setup
 
 Install dependencies:
 
+```bash
 npm install
+```
 
-Create .env.local:
+Create a `.env.local` file:
 
+```env
 FOUNDRY_PROJECT_ENDPOINT=
 FOUNDRY_MODEL_NAME=gpt-5-mini
 DOCUMENT_INTELLIGENCE_ENDPOINT=
 DOCUMENT_INTELLIGENCE_API_KEY=
 AZURE_SEARCH_ENDPOINT=
 AZURE_SEARCH_INDEX=civictrace-evidence
+```
 
-Sign in to Azure and run:
+Sign in to Azure:
 
+```bash
 az login
+```
+
+Run the application:
+
+```bash
 npm run dev
+```
 
 Open:
 
+```text
 http://localhost:3000
+```
 
 Build check:
 
+```bash
 npm run build
-Security
+```
 
-Secrets are stored in .env.local and excluded from Git. Azure AI Search uses Microsoft Entra ID / Azure RBAC.
+## Security
 
-Status
+- Secrets are stored in `.env.local`
+- `.env.local` is excluded from Git
+- Azure AI Search uses Microsoft Entra ID / RBAC instead of API keys
+
+## Status
 
 Hackathon MVP complete with:
 
-grounded policy analysis
-public sentiment analysis
-hearing testimony analysis
-unified evidence search
-evidence-grounded Q&A
-leadership brief generation
-Team
+- Grounded policy analysis
+- Public sentiment analysis
+- Hearing testimony analysis
+- Unified evidence search
+- Evidence-grounded Q&A
+- Leadership Brief generation
 
-Built for the Policy and Public Sentiment Analyst hackathon challenge.
+## Team
+
+Built for the **Policy and Public Sentiment Analyst** hackathon challenge.
+EOF
+
+git add README.md
+git commit -m "docs: fix and polish README"
+git push origin main

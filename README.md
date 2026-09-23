@@ -1,36 +1,52 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CivicTrace
 
-## Getting Started
+Evidence-grounded policy and public sentiment analysis using Microsoft Foundry, Azure AI Search, and Azure Document Intelligence.
 
-First, run the development server:
+## Overview
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+CivicTrace helps analysts review policy documents, public comments, and hearing testimony in one evidence-grounded workspace.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Instead of generating unsupported summaries, CivicTrace links AI-generated claims back to exact source evidence such as:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- policy pages
+- submitted public comments
+- hearing speaker statements
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The goal is to make AI-assisted policy analysis more transparent, reviewable, and useful for decision support.
 
-## Learn More
+## Core Features
 
-To learn more about Next.js, take a look at the following resources:
+- Upload and analyze policy PDFs
+- Extract page-aware evidence using Azure Document Intelligence
+- Index policy, public comments, and hearing testimony in Azure AI Search
+- Ask grounded questions across the full case
+- Analyze public comment stance and recurring concerns
+- Analyze public hearing testimony with speaker-linked evidence
+- Generate an evidence-grounded Leadership Brief
+- Display limitations and representativeness warnings
+- Validate AI-produced evidence references before showing them to users
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Architecture
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```text
+Policy PDF
+   ↓
+Azure Document Intelligence
+   ↓
+Page-aware Evidence
+   │
+   ├───────────────┐
+   │               │
+Public Comments    Hearing Testimony
+   │               │
+   └───────┬───────┘
+           ↓
+     Azure AI Search
+           ↓
+    Microsoft Foundry
+           ↓
+ ┌─────────┼──────────────┐
+ │         │              │
+Q&A     Analysis    Leadership Brief
+           ↓
+    Evidence Traceability

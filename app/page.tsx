@@ -1,3 +1,4 @@
+import HearingAnalyzer from "../components/policy/HearingAnalyzer";
 import PolicyAnalyzer from "../components/policy/PolicyAnalyzer";
 import PolicyWorkspace from "../components/policy/PolicyWorkspace";
 import PublicCommentsAnalyzer from "../components/policy/PublicCommentsAnalyzer";
@@ -20,12 +21,12 @@ export default function Home() {
           </h1>
 
           <p className="mt-3 max-w-3xl text-gray-600">
-            Turn policy documents, public feedback, hearings, and news into
-            transparent, evidence-grounded insights.
+            Turn policy documents, public feedback, hearing testimony, and
+            related evidence into transparent, evidence-grounded insights.
           </p>
         </header>
 
-        {/* Upload + Index + Grounded Q&A */}
+        {/* PDF Upload + Azure AI Search + Grounded Q&A */}
         <PolicyWorkspace />
 
         {/* Raw Text Policy Analyzer */}
@@ -33,12 +34,17 @@ export default function Home() {
           <PolicyAnalyzer />
         </div>
 
-        {/* Public Comment Sentiment Analysis */}
+        {/* Written Public Comments */}
         <div className="mt-8">
           <PublicCommentsAnalyzer />
         </div>
 
-        {/* Example Demo Case */}
+        {/* Public Hearing Transcript */}
+        <div className="mt-8">
+          <HearingAnalyzer />
+        </div>
+
+        {/* Example Policy Case */}
         <section className="mt-10 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -226,6 +232,12 @@ export default function Home() {
                         Speaker: {evidence.speaker}
                       </span>
                     )}
+
+                    {typeof evidence.timestampSec === "number" && (
+                      <span className="text-sm text-gray-500">
+                        Timestamp: {evidence.timestampSec}s
+                      </span>
+                    )}
                   </div>
 
                   <blockquote className="mt-4 border-l-4 border-blue-500 pl-4 text-sm leading-6 text-gray-700">
@@ -239,8 +251,10 @@ export default function Home() {
           {/* Trust Notice */}
           <div className="mt-8 rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm leading-6 text-yellow-900">
             CivicTrace AI outputs are interpretations of source evidence, not
-            final policy judgments. Analysts should review the cited source
-            material before relying on an insight.
+            final policy judgments. Analysts should review cited source
+            material before relying on an insight. Public comments and hearing
+            testimony describe the submitted sample and should not automatically
+            be treated as representative of the broader public.
           </div>
         </section>
       </div>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import HearingAnalyzer from "./HearingAnalyzer";
+import LeadershipBrief from "./LeadershipBrief";
 import PolicyUploader from "./PolicyUploader";
 import PolicyQA from "./PolicyQA";
 import PublicCommentsAnalyzer from "./PublicCommentsAnalyzer";
@@ -67,6 +68,18 @@ export default function PolicyWorkspace() {
             caseId ??
             "no-document"
           }
+          caseId={
+            caseId
+          }
+          sourceTitle={
+            sourceTitle
+          }
+        />
+      </div>
+
+      <div className="mt-8">
+        <LeadershipBrief
+          key={`brief-${caseId ?? "no-document"}`}
           caseId={
             caseId
           }

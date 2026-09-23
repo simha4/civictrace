@@ -25,11 +25,13 @@ const AnswerSchema = z.object({
     "low",
   ]),
 
-  evidenceIds:
-    z.array(z.string()),
+  evidenceIds: z.array(
+    z.string()
+  ),
 
-  limitations:
-    z.array(z.string()),
+  limitations: z.array(
+    z.string()
+  ),
 });
 
 export async function POST(
@@ -43,7 +45,9 @@ export async function POST(
       question,
       caseId,
     } =
-      RequestSchema.parse(body);
+      RequestSchema.parse(
+        body
+      );
 
     const matches =
       await searchEvidence(
@@ -58,32 +62,94 @@ export async function POST(
         answer:
           "I could not find enough supporting evidence in this CivicTrace case to answer the question.",
 
-        confidence: "low",
+        confidence:
+          "low",
 
-        evidenceIds: [],
+        evidenceIds:
+          [],
 
         limitations: [
           "No relevant evidence was retrieved from Azure AI Search for this case.",
         ],
 
-        evidence: [],
+        evidence:
+          [],
       });
     }
 
     const evidenceContext =
       matches
         .map(
-          (item) => `
+          (item) => {
+            let humanReadableSource =
+              item.sourceTitle;
+
+            if (
+              item.sourceType ===
+                "policy" &&
+              typeof item.pageNumber ===
+                "number"
+            ) {
+              humanReadableSource =
+                `${item.sourceTitle}, page ${item.pageNumber}`;
+            }
+
+            if (
+              item.sourceType ===
+                "public_comment" &&
+              typeof item.sequenceNumber ===
+                "number"
+            ) {
+              humanReadableSource =
+                `submitted public comment ${item.sequenceNumber}`;
+            }
+
+            if (
+              item.sourceType ===
+              "hearing"
+            ) {
+              const hearingParts: string[] =
+                [];
+
+              if (
+                item.speaker
+              ) {
+                hearingParts.push(
+                  item.speaker
+                );
+              }
+
+              if (
+                typeof item.sequenceNumber ===
+                "number"
+              ) {
+                hearingParts.push(
+                  `statement ${item.sequenceNumber}`
+                );
+              }
+
+              humanReadableSource =
+                hearingParts.length >
+                0
+                  ? hearingParts.join(
+                      ", "
+                    )
+                  : "hearing testimony";
+            }
+
+            return `
 EVIDENCE ID: ${item.id}
 SOURCE TYPE: ${item.sourceType}
 SOURCE TITLE: ${item.sourceTitle}
+HUMAN-READABLE SOURCE: ${humanReadableSource}
 PAGE: ${item.pageNumber ?? "N/A"}
 SEQUENCE: ${item.sequenceNumber ?? "N/A"}
 SPEAKER: ${item.speaker ?? "N/A"}
 
 TEXT:
 ${item.content}
-`
+`;
+          }
         )
         .join(
           "\n---\n"
@@ -102,7 +168,7 @@ The evidence may come from:
 Return ONLY valid JSON using exactly this structure:
 
 {
-  "answer": "Concise neutral answer",
+  "answer": "Concise neutral answer written for a human reader",
   "confidence": "high",
   "evidenceIds": ["exact-evidence-id"],
   "limitations": []
@@ -116,17 +182,33 @@ Rules:
 - Do not invent quotations.
 - Do not invent page numbers.
 - Do not invent comment numbers.
-- Do not invent speakers.
+- Do not invent speaker names.
 - Do not invent evidence IDs.
 - Every evidence ID must exactly match an EVIDENCE ID supplied below.
 - Cite only evidence that actually supports the answer.
-- Clearly distinguish policy text from submitted public comments and hearing testimony when relevant.
+- Clearly distinguish policy document evidence from submitted public comments and hearing testimony when relevant.
 - Do not claim submitted comments or hearing speakers represent the broader public.
 - If evidence is incomplete, conflicting, or ambiguous, state that clearly.
 - Keep the answer neutral and factual.
 - confidence must be exactly "high", "medium", or "low".
-- Return JSON only.
-- Do not use markdown code fences.
+
+IMPORTANT PRESENTATION RULES:
+
+- Do NOT include raw EVIDENCE ID values in the prose answer.
+- Do NOT include UUIDs or internal database/search identifiers in the prose answer.
+- Use human-readable source descriptions instead.
+- Examples of human-readable source descriptions:
+  - "the policy document"
+  - "policy page 2"
+  - "submitted public comment 2"
+  - "Resident 1"
+  - "Business Owner"
+  - "hearing testimony"
+- The exact raw evidence IDs should appear ONLY inside the "evidenceIds" JSON array.
+- The prose answer should read naturally for a policy analyst or decision-maker.
+
+Return JSON only.
+Do not use markdown code fences.
 
 QUESTION:
 
@@ -186,10 +268,11 @@ ${evidenceContext}
 
     const evidence =
       matches
-        .filter((item) =>
-          evidenceIds.includes(
-            item.id
-          )
+        .filter(
+          (item) =>
+            evidenceIds.includes(
+              item.id
+            )
         )
         .map(
           (item) => ({

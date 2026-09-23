@@ -21,6 +21,7 @@ const credential = new DefaultAzureCredential();
 
 export type EvidenceDocument = {
   id: string;
+
   caseId: string;
 
   sourceType:
@@ -31,7 +32,9 @@ export type EvidenceDocument = {
   sourceTitle: string;
 
   pageNumber?: number;
+
   sequenceNumber?: number;
+
   speaker?: string;
 
   content: string;
@@ -112,7 +115,9 @@ export async function ensureSearchIndex() {
     ],
   };
 
-  await searchIndexClient.createOrUpdateIndex(index);
+  await searchIndexClient.createOrUpdateIndex(
+    index
+  );
 }
 
 export async function uploadEvidence(
@@ -149,7 +154,10 @@ export async function uploadEvidence(
 function escapeODataString(
   value: string
 ) {
-  return value.replace(/'/g, "''");
+  return value.replace(
+    /'/g,
+    "''"
+  );
 }
 
 export async function searchEvidence(
@@ -157,7 +165,9 @@ export async function searchEvidence(
   caseId?: string
 ) {
   const filter = caseId
-    ? `caseId eq '${escapeODataString(caseId)}'`
+    ? `caseId eq '${escapeODataString(
+        caseId
+      )}'`
     : undefined;
 
   const results =
@@ -165,6 +175,7 @@ export async function searchEvidence(
       query,
       {
         top: 8,
+
         filter,
 
         select: [
@@ -180,7 +191,8 @@ export async function searchEvidence(
       }
     );
 
-  const matches: EvidenceDocument[] = [];
+  const matches: EvidenceDocument[] =
+    [];
 
   for await (
     const result of results.results
@@ -191,4 +203,47 @@ export async function searchEvidence(
   }
 
   return matches;
+}
+
+export async function getCaseEvidence(
+  caseId: string
+) {
+  const filter =
+    `caseId eq '${escapeODataString(
+      caseId
+    )}'`;
+
+  const results =
+    await searchClient.search(
+      "*",
+      {
+        top: 100,
+
+        filter,
+
+        select: [
+          "id",
+          "caseId",
+          "sourceType",
+          "sourceTitle",
+          "pageNumber",
+          "sequenceNumber",
+          "speaker",
+          "content",
+        ],
+      }
+    );
+
+  const evidence: EvidenceDocument[] =
+    [];
+
+  for await (
+    const result of results.results
+  ) {
+    evidence.push(
+      result.document
+    );
+  }
+
+  return evidence;
 }

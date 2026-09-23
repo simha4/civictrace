@@ -166,7 +166,7 @@ Hackathon MVP complete with:
 ## Team
 
 Built for the **Policy and Public Sentiment Analyst** hackathon challenge.
-EOF
+
 
 git add README.md
 git commit -m "docs: fix and polish README"

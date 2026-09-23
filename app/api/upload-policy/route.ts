@@ -1,12 +1,23 @@
-import { NextResponse } from "next/server";
+import {
+  NextRequest,
+  NextResponse,
+} from "next/server";
 
-import { extractDocument } from
-  "../../../lib/ai/document-intelligence";
+import { randomUUID } from "crypto";
 
-export const runtime = "nodejs";
+import { extractDocument } from "../../../lib/ai/document-intelligence";
+
+import {
+  ensureSearchIndex,
+  uploadEvidence,
+  type EvidenceDocument,
+} from "../../../lib/search/azure-search";
+
+const MAX_FILE_SIZE =
+  10 * 1024 * 1024;
 
 export async function POST(
-  request: Request
+  request: NextRequest
 ) {
   try {
     const formData =
@@ -19,7 +30,7 @@ export async function POST(
       return NextResponse.json(
         {
           error:
-            "A PDF file is required",
+            "A PDF file is required.",
         },
         {
           status: 400,
@@ -28,13 +39,12 @@ export async function POST(
     }
 
     if (
-      file.type !==
-      "application/pdf"
+      file.type !== "application/pdf"
     ) {
       return NextResponse.json(
         {
           error:
-            "Only PDF files are supported",
+            "Only PDF files are supported.",
         },
         {
           status: 400,
@@ -42,15 +52,13 @@ export async function POST(
       );
     }
 
-    // 10 MB maximum for hackathon MVP.
-    const maxSize =
-      10 * 1024 * 1024;
-
-    if (file.size > maxSize) {
+    if (
+      file.size > MAX_FILE_SIZE
+    ) {
       return NextResponse.json(
         {
           error:
-            "PDF is too large. Maximum size is 10 MB.",
+            "PDF must be 10 MB or smaller.",
         },
         {
           status: 400,
@@ -64,12 +72,58 @@ export async function POST(
     const buffer =
       Buffer.from(arrayBuffer);
 
+    // 1. Extract document with Azure Document Intelligence
     const extracted =
       await extractDocument(buffer);
 
-    return NextResponse.json({
-      fileName: file.name,
+    if (
+      extracted.pages.length === 0
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "No readable pages were extracted from the PDF.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
 
+    // 2. Create a unique CivicTrace case
+    const caseId =
+      randomUUID();
+
+    // 3. Convert extracted pages into searchable evidence
+    const evidenceDocuments: EvidenceDocument[] =
+      extracted.pages
+        .filter(
+          (page) =>
+            page.text.trim().length >
+            0
+        )
+        .map((page) => ({
+          id: `${caseId}-page-${page.pageNumber}`,
+          caseId,
+          sourceType: "policy",
+          sourceTitle: file.name,
+          pageNumber:
+            page.pageNumber,
+          content: page.text,
+        }));
+
+    // 4. Ensure index exists
+    await ensureSearchIndex();
+
+    // 5. Upload evidence into Azure AI Search
+    await uploadEvidence(
+      evidenceDocuments
+    );
+
+    return NextResponse.json({
+      caseId,
+
+      fileName: file.name,
       fileSize: file.size,
 
       content:
@@ -80,6 +134,9 @@ export async function POST(
 
       pageCount:
         extracted.pages.length,
+
+      indexedEvidenceCount:
+        evidenceDocuments.length,
     });
   } catch (error) {
     console.error(
@@ -90,7 +147,7 @@ export async function POST(
     return NextResponse.json(
       {
         error:
-          "Unable to extract the policy document",
+          "Unable to process and index the PDF.",
       },
       {
         status: 500,

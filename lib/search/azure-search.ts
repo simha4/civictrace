@@ -50,14 +50,12 @@ export async function ensureSearchIndex() {
         name: "id",
         type: "Edm.String",
         key: true,
-        searchable: false,
         filterable: true,
       },
 
       {
         name: "caseId",
         type: "Edm.String",
-        searchable: false,
         filterable: true,
       },
 
@@ -79,7 +77,6 @@ export async function ensureSearchIndex() {
       {
         name: "pageNumber",
         type: "Edm.Int32",
-        searchable: false,
         filterable: true,
         sortable: true,
       },
@@ -92,7 +89,9 @@ export async function ensureSearchIndex() {
     ],
   };
 
-  await searchIndexClient.createOrUpdateIndex(index);
+  await searchIndexClient.createOrUpdateIndex(
+    index
+  );
 }
 
 export async function uploadEvidence(
@@ -114,7 +113,7 @@ export async function uploadEvidence(
 
   if (failed.length > 0) {
     console.error(
-      "Some evidence documents failed to upload:",
+      "Azure Search upload failures:",
       failed
     );
 
@@ -126,22 +125,39 @@ export async function uploadEvidence(
   return result;
 }
 
-export async function searchEvidence(
-  query: string
+function escapeODataString(
+  value: string
 ) {
-  const results =
-    await searchClient.search(query, {
-      top: 5,
+  return value.replace(/'/g, "''");
+}
 
-      select: [
-        "id",
-        "caseId",
-        "sourceType",
-        "sourceTitle",
-        "pageNumber",
-        "content",
-      ],
-    });
+export async function searchEvidence(
+  query: string,
+  caseId?: string
+) {
+  const filter = caseId
+    ? `caseId eq '${escapeODataString(
+        caseId
+      )}'`
+    : undefined;
+
+  const results =
+    await searchClient.search(
+      query,
+      {
+        top: 5,
+        filter,
+
+        select: [
+          "id",
+          "caseId",
+          "sourceType",
+          "sourceTitle",
+          "pageNumber",
+          "content",
+        ],
+      }
+    );
 
   const matches: EvidenceDocument[] =
     [];

@@ -23,16 +23,33 @@ const RequestSchema = z.object({
     .max(100),
 });
 
-const ClassificationSchema = z.object({
+const AllowedStances = [
+  "support",
+  "oppose",
+  "neutral",
+  "mixed",
+] as const;
+
+type Stance =
+  (typeof AllowedStances)[number];
+
+/*
+ * Important:
+ *
+ * We deliberately accept stance as a string from Foundry.
+ * The model may occasionally return values such as:
+ *
+ * "concern"
+ * "opposition"
+ * "support_with_concern"
+ * "mixed_support"
+ *
+ * We normalize those values on the server instead of
+ * failing the entire analysis.
+ */
+const RawClassificationSchema = z.object({
   commentId: z.string(),
-
-  stance: z.enum([
-    "support",
-    "oppose",
-    "neutral",
-    "mixed",
-  ]),
-
+  stance: z.string(),
   concernTags: z.array(
     z.string()
   ),
@@ -46,9 +63,9 @@ const ThemeSchema = z.object({
   ),
 });
 
-const ModelResponseSchema = z.object({
+const RawModelResponseSchema = z.object({
   classifications: z.array(
-    ClassificationSchema
+    RawClassificationSchema
   ),
 
   themes: z.array(
@@ -56,36 +73,223 @@ const ModelResponseSchema = z.object({
   ),
 
   limitations: z.array(
-    z.string()
+    z.unknown()
   ),
 });
+
+function normalizeStance(
+  value: string
+): Stance {
+  const normalized =
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "_")
+      .replace(/-/g, "_");
+
+  /*
+   * Exact valid values.
+   */
+  if (
+    AllowedStances.includes(
+      normalized as Stance
+    )
+  ) {
+    return normalized as Stance;
+  }
+
+  /*
+   * Common support variants.
+   */
+  if (
+    normalized === "supported" ||
+    normalized === "positive" ||
+    normalized === "in_support" ||
+    normalized === "supportive"
+  ) {
+    return "support";
+  }
+
+  /*
+   * Common opposition / concern variants.
+   */
+  if (
+    normalized === "opposition" ||
+    normalized === "opposed" ||
+    normalized === "against" ||
+    normalized === "negative"
+  ) {
+    return "oppose";
+  }
+
+  /*
+   * Support combined with an explicit concern,
+   * objection, reservation, or qualification
+   * should be treated as mixed.
+   */
+  if (
+    normalized.includes(
+      "support_with"
+    ) ||
+    normalized.includes(
+      "support_but"
+    ) ||
+    normalized.includes(
+      "mixed_support"
+    ) ||
+    normalized.includes(
+      "qualified_support"
+    ) ||
+    normalized.includes(
+      "conditional_support"
+    )
+  ) {
+    return "mixed";
+  }
+
+  /*
+   * A pure concern does not automatically mean
+   * opposition. We use neutral unless the model
+   * explicitly indicates opposition.
+   */
+  if (
+    normalized === "concern" ||
+    normalized === "concerned" ||
+    normalized === "unclear" ||
+    normalized === "informational" ||
+    normalized === "unknown"
+  ) {
+    return "neutral";
+  }
+
+  return "neutral";
+}
+
+function normalizeLimitation(
+  value: unknown
+): string | null {
+  if (
+    typeof value === "string"
+  ) {
+    const trimmed =
+      value.trim();
+
+    return trimmed
+      ? trimmed
+      : null;
+  }
+
+  if (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value)
+  ) {
+    const record =
+      value as Record<
+        string,
+        unknown
+      >;
+
+    const stringValues =
+      Object.values(
+        record
+      )
+        .filter(
+          (
+            item
+          ): item is string =>
+            typeof item ===
+            "string"
+        )
+        .map(
+          (item) =>
+            item.trim()
+        )
+        .filter(Boolean);
+
+    if (
+      stringValues.length >
+      0
+    ) {
+      return stringValues.join(
+        ": "
+      );
+    }
+  }
+
+  return null;
+}
 
 export async function POST(
   request: Request
 ) {
+  /*
+   * Parse the incoming user request separately.
+   *
+   * This prevents a malformed model response from
+   * incorrectly producing the message:
+   * "caseId and valid comments are required."
+   */
+  let requestData:
+    z.infer<
+      typeof RequestSchema
+    >;
+
   try {
     const body =
       await request.json();
 
+    requestData =
+      RequestSchema.parse(
+        body
+      );
+  } catch (error) {
+    console.error(
+      "Invalid public comment request:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        error:
+          "caseId and between 1 and 100 valid comments are required.",
+      },
+      {
+        status: 400,
+      }
+    );
+  }
+
+  try {
     const {
       caseId,
       comments,
     } =
-      RequestSchema.parse(
-        body
-      );
+      requestData;
 
+    /*
+     * Create deterministic local evidence IDs.
+     *
+     * These IDs are what Foundry sees.
+     */
     const evidence =
       comments.map(
-        (comment, index) => ({
-          id: `comment-${index + 1}`,
-          text: comment,
+        (
+          comment,
+          index
+        ) => ({
+          id:
+            `comment-${index + 1}`,
+
+          text:
+            comment,
+
           sequenceNumber:
             index + 1,
         })
       );
 
-    const context =
+    const evidenceContext =
       evidence
         .map(
           (item) => `
@@ -102,9 +306,9 @@ ${item.text}
     const prompt = `
 You are CivicTrace, an evidence-grounded public comment analysis assistant.
 
-Analyze ONLY the submitted comments.
+Analyze ONLY the submitted public comments.
 
-Return ONLY valid JSON:
+Return ONLY valid JSON using exactly this structure:
 
 {
   "classifications": [
@@ -114,31 +318,93 @@ Return ONLY valid JSON:
       "concernTags": ["access"]
     }
   ],
+
   "themes": [
     {
-      "label": "Access",
-      "summary": "A submitted comment discusses access.",
-      "evidenceIds": ["comment-1"]
+      "label": "Implementation timeline",
+      "summary": "A submitted comment raises concern about the implementation timeline.",
+      "evidenceIds": ["comment-2"]
     }
   ],
-  "limitations": []
+
+  "limitations": [
+    "The submitted comments are a small sample."
+  ]
 }
 
-Rules:
+STANCE VALUES:
 
-- Use only the supplied comments.
+The "stance" field MUST be exactly one of:
+
+- "support"
+- "oppose"
+- "neutral"
+- "mixed"
+
+STANCE DEFINITIONS:
+
+"support"
+- The comment clearly supports the policy or proposal
+  without expressing a substantive objection.
+
+Example:
+"I support the policy because it will improve access."
+
+"oppose"
+- The comment clearly rejects or opposes the policy
+  or proposal.
+
+Example:
+"I oppose this policy because the cost is too high."
+
+"neutral"
+- The comment does not clearly support or oppose
+  the proposal.
+- Questions, requests for information, and standalone
+  concerns without an explicit overall position should
+  normally be neutral.
+
+Example:
+"I need more information about enforcement."
+
+"mixed"
+- The comment expresses support while ALSO raising
+  a substantive objection, reservation, concern,
+  condition, or requested change.
+
+Example:
+"I support the goal, but the six-month deadline is too short."
+
+IMPORTANT:
+If a comment says "I support..." followed by "but",
+"however", or an explicit concern, classify it as "mixed",
+not "support".
+
+RULES:
+
+- Analyze each supplied comment exactly once.
+- Use only the comments supplied below.
 - Do not use outside knowledge.
+- Do not invent comments.
 - Do not invent COMMENT IDs.
-- Classify every comment exactly once.
-- Keep topic labels neutral.
-- Do not infer demographics or political affiliation.
-- Do not claim the sample represents the broader public.
+- Every commentId must exactly match a supplied COMMENT ID.
+- Every theme evidenceId must exactly match a supplied COMMENT ID.
+- concernTags should be short neutral topic labels.
+- Themes may describe recurring concerns, benefits,
+  implementation issues, requests for clarification,
+  or other meaningful patterns.
+- Do not infer demographics.
+- Do not infer political affiliation.
+- Do not infer motives.
+- Do not claim these comments represent the broader public.
+- Keep all summaries neutral and factual.
+- "limitations" MUST be an array of plain strings.
 - Return JSON only.
 - Do not use markdown code fences.
 
-COMMENTS:
+PUBLIC COMMENTS:
 
-${context}
+${evidenceContext}
 `;
 
     const raw =
@@ -162,11 +428,14 @@ ${context}
         )
         .trim();
 
+    const parsed =
+      JSON.parse(
+        cleaned
+      );
+
     const validated =
-      ModelResponseSchema.parse(
-        JSON.parse(
-          cleaned
-        )
+      RawModelResponseSchema.parse(
+        parsed
       );
 
     const validIds =
@@ -177,12 +446,17 @@ ${context}
         )
       );
 
+    /*
+     * Normalize and validate classifications.
+     */
     const classificationMap =
       new Map<
         string,
-        z.infer<
-          typeof ClassificationSchema
-        >
+        {
+          commentId: string;
+          stance: Stance;
+          concernTags: string[];
+        }
       >();
 
     for (
@@ -190,26 +464,55 @@ ${context}
       of validated.classifications
     ) {
       if (
-        validIds.has(
-          classification.commentId
-        ) &&
-        !classificationMap.has(
+        !validIds.has(
           classification.commentId
         )
       ) {
-        classificationMap.set(
-          classification.commentId,
-          classification
-        );
+        continue;
       }
+
+      if (
+        classificationMap.has(
+          classification.commentId
+        )
+      ) {
+        continue;
+      }
+
+      classificationMap.set(
+        classification.commentId,
+        {
+          commentId:
+            classification.commentId,
+
+          stance:
+            normalizeStance(
+              classification.stance
+            ),
+
+          concernTags:
+            classification.concernTags,
+        }
+      );
     }
 
+    /*
+     * Ensure every comment gets exactly one result,
+     * even if Foundry omitted one.
+     */
     const classifications =
       evidence.map(
-        (item) =>
-          classificationMap.get(
-            item.id
-          ) ?? {
+        (item) => {
+          const existing =
+            classificationMap.get(
+              item.id
+            );
+
+          if (existing) {
+            return existing;
+          }
+
+          return {
             commentId:
               item.id,
 
@@ -218,10 +521,17 @@ ${context}
 
             concernTags:
               [],
-          }
+          };
+        }
       );
 
-    const stanceCounts = {
+    /*
+     * Deterministic server-side totals.
+     */
+    const stanceCounts: Record<
+      Stance,
+      number
+    > = {
       support: 0,
       oppose: 0,
       neutral: 0,
@@ -237,6 +547,9 @@ ${context}
       ] += 1;
     }
 
+    /*
+     * Validate all model-created theme evidence IDs.
+     */
     const themes =
       validated.themes
         .map(
@@ -261,6 +574,10 @@ ${context}
               evidenceCount:
                 evidenceIds.length,
 
+              /*
+               * "Less common" is deliberately
+               * scoped only to this submitted sample.
+               */
               lessCommon:
                 evidenceIds.length >
                   0 &&
@@ -281,6 +598,9 @@ ${context}
               .length > 0
         );
 
+    /*
+     * Resolve original submitted comment text.
+     */
     const resolvedEvidence =
       evidence.map(
         (item) => {
@@ -292,8 +612,11 @@ ${context}
             );
 
           return {
-            id: item.id,
-            text: item.text,
+            id:
+              item.id,
+
+            text:
+              item.text,
 
             stance:
               classification?.stance ??
@@ -307,13 +630,17 @@ ${context}
       );
 
     /*
-     * Index the raw submitted comments.
-     * Foundry analysis is NOT stored as source evidence.
+     * Raw comments become searchable evidence.
+     *
+     * We store the original submitted statements,
+     * not Foundry-generated summaries.
      */
-    const searchDocuments: EvidenceDocument[] =
+    const searchDocuments:
+      EvidenceDocument[] =
       evidence.map(
         (item) => ({
-          id: `${caseId}-${item.id}`,
+          id:
+            `${caseId}-${item.id}`,
 
           caseId,
 
@@ -337,19 +664,44 @@ ${context}
       searchDocuments
     );
 
+    const normalizedLimitations =
+      validated.limitations
+        .map(
+          normalizeLimitation
+        )
+        .filter(
+          (
+            limitation
+          ): limitation is string =>
+            limitation !==
+            null
+        );
+
+    const representativenessWarning =
+      "This analysis describes only the submitted comments and should not be treated as representative of the broader public unless the collection method supports that conclusion.";
+
+    if (
+      !normalizedLimitations.includes(
+        representativenessWarning
+      )
+    ) {
+      normalizedLimitations.push(
+        representativenessWarning
+      );
+    }
+
     return NextResponse.json({
       sampleSize:
         comments.length,
 
       stanceCounts,
 
+      classifications,
+
       themes,
 
-      limitations: [
-        ...validated.limitations,
-
-        "This analysis describes only the submitted comments and should not be treated as representative of the broader public unless the collection method supports that conclusion.",
-      ],
+      limitations:
+        normalizedLimitations,
 
       evidence:
         resolvedEvidence,
@@ -367,13 +719,18 @@ ${context}
       error instanceof
       z.ZodError
     ) {
+      console.error(
+        "Foundry comment response validation issues:",
+        error.issues
+      );
+
       return NextResponse.json(
         {
           error:
-            "caseId and valid comments are required.",
+            "The AI returned an invalid public-comment analysis response.",
         },
         {
-          status: 400,
+          status: 502,
         }
       );
     }

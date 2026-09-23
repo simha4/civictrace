@@ -168,6 +168,7 @@ Hackathon MVP complete with:
 Built for the **Policy and Public Sentiment Analyst** hackathon challenge.
 
 
-git add README.md
-git commit -m "docs: fix and polish README"
-git push origin main
+## Acknowledgments
+
+Development assistance:
+- ChatGPT by OpenAI — architecture guidance, debugging support, code review, and documentation assistance

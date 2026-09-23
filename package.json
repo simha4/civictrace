@@ -9,13 +9,15 @@
     "lint": "eslint",
     "test:foundry": "tsx scripts/test-foundry.ts",
     "test:policy": "tsx scripts/test-policy-analysis.ts",
-    "test:document": "tsx scripts/test-document-intelligence.ts"
+    "test:document": "tsx scripts/test-document-intelligence.ts",
+    "test:search": "tsx scripts/test-search.ts"
   },
   "dependencies": {
     "@azure-rest/ai-document-intelligence": "^1.1.0",
     "@azure/ai-projects": "^2.7.0",
     "@azure/core-auth": "^1.11.0",
     "@azure/identity": "^4.13.3",
+    "@azure/search-documents": "^13.0.0",
     "dotenv": "^18.0.3",
     "next": "16.3.6",
     "react": "19.2.8",

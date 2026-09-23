@@ -46,13 +46,60 @@ type CommentAnalysis = {
   indexedEvidenceCount?: number;
 };
 
+type ImportedComment = {
+  id: string;
+  title: string;
+  text: string;
+  attachmentUrl?: string;
+};
+
+type ImportSummary = {
+  requested: number;
+  ready: number;
+  failed: number;
+};
+
+type RegulationsApiComment = {
+  id: string;
+  title?: string;
+  analysisText?: string | null;
+  readyForAnalysis?: boolean;
+  attachmentUrl?: string;
+  extractionError?: string;
+};
+
 export default function PublicCommentsAnalyzer({
   caseId,
 }: PublicCommentsAnalyzerProps) {
-  const [commentsText, setCommentsText] = useState("");
+  const [commentsText, setCommentsText] =
+    useState("");
+
+  const [
+    importedComments,
+    setImportedComments,
+  ] = useState<ImportedComment[]>([]);
+
+  const [
+    importSummary,
+    setImportSummary,
+  ] = useState<ImportSummary | null>(
+    null
+  );
+
+  const [
+    importingComments,
+    setImportingComments,
+  ] = useState(false);
+
+  const [
+    importError,
+    setImportError,
+  ] = useState("");
 
   const [analysis, setAnalysis] =
-    useState<CommentAnalysis | null>(null);
+    useState<CommentAnalysis | null>(
+      null
+    );
 
   const [loading, setLoading] =
     useState(false);
@@ -60,7 +107,17 @@ export default function PublicCommentsAnalyzer({
   const [error, setError] =
     useState("");
 
-  function parseComments() {
+  /*
+   * Demo regulation:
+   * EPA PFAS National Primary
+   * Drinking Water Regulation
+   */
+  const PFAS_OBJECT_ID =
+    "0900006485883ec6";
+
+  const OFFICIAL_COMMENT_LIMIT = 5;
+
+  function parseManualComments() {
     return commentsText
       .split("\n")
       .map((comment) =>
@@ -69,8 +126,18 @@ export default function PublicCommentsAnalyzer({
       .filter(Boolean);
   }
 
+  /*
+   * Imported comments may contain many
+   * lines, so keep each extracted document
+   * as ONE comment.
+   */
   const comments =
-    parseComments();
+    importedComments.length > 0
+      ? importedComments.map(
+          (comment) =>
+            comment.text
+        )
+      : parseManualComments();
 
   const commentCount =
     comments.length;
@@ -105,6 +172,118 @@ export default function PublicCommentsAnalyzer({
 
       default:
         return "bg-gray-100 text-gray-700";
+    }
+  }
+
+  async function handleLoadOfficialComments() {
+    if (!caseId) {
+      return;
+    }
+
+    setImportingComments(true);
+    setImportError("");
+    setError("");
+    setAnalysis(null);
+
+    try {
+      const response =
+        await fetch(
+          `/api/regulations-comments?objectId=${PFAS_OBJECT_ID}&limit=${OFFICIAL_COMMENT_LIMIT}`
+        );
+
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ??
+            "Unable to load official comments."
+        );
+      }
+
+      const allComments:
+        RegulationsApiComment[] =
+        Array.isArray(
+          data.comments
+        )
+          ? data.comments
+          : [];
+
+      const readyComments =
+        allComments
+          .filter(
+            (
+              comment
+            ): comment is RegulationsApiComment & {
+              analysisText: string;
+            } =>
+              Boolean(
+                comment.readyForAnalysis &&
+                  typeof comment.analysisText ===
+                    "string" &&
+                  comment.analysisText.trim()
+              )
+          )
+          .map(
+            (
+              comment
+            ): ImportedComment => ({
+              id: comment.id,
+
+              title:
+                comment.title ??
+                comment.id,
+
+              text:
+                comment.analysisText,
+
+              attachmentUrl:
+                comment.attachmentUrl,
+            })
+          );
+
+      setImportedComments(
+        readyComments
+      );
+
+      /*
+       * Switch away from manual input
+       * when official comments are loaded.
+       */
+      setCommentsText("");
+
+      setImportSummary({
+        requested:
+          allComments.length,
+
+        ready:
+          readyComments.length,
+
+        failed:
+          allComments.length -
+          readyComments.length,
+      });
+
+      if (
+        readyComments.length === 0
+      ) {
+        setImportError(
+          "No Regulations.gov comments could be prepared for analysis."
+        );
+      }
+    } catch (error) {
+      console.error(
+        "Official comment import error:",
+        error
+      );
+
+      setImportError(
+        error instanceof Error
+          ? error.message
+          : "Unable to load official comments."
+      );
+    } finally {
+      setImportingComments(false);
     }
   }
 
@@ -178,33 +357,230 @@ export default function PublicCommentsAnalyzer({
         </h2>
 
         <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
-          Paste one public comment per line. Each non-empty line is treated as
-          a separate comment. CivicTrace classifies expressed stance, detects
-          recurring concerns, and links every interpretation back to the exact
-          submitted comment.
+          Load official public
+          comments from
+          Regulations.gov or enter
+          comments manually.
+          CivicTrace classifies
+          expressed stance, detects
+          recurring concerns, and
+          links interpretations back
+          to the submitted evidence.
         </p>
       </div>
 
       {!caseId && (
         <div className="mt-4 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900">
-          Upload a policy PDF first so these comments can be linked to the same
-          CivicTrace case and indexed together in Azure AI Search.
+          Upload a policy PDF first
+          so these comments can be
+          linked to the same
+          CivicTrace case and indexed
+          together in Azure AI Search.
         </div>
       )}
 
       {caseId && (
         <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
-          These comments will be added to the current CivicTrace case.
+          These comments will be
+          added to the current
+          CivicTrace case.
         </div>
       )}
 
+      {/* --------------------------------
+          Regulations.gov import
+      -------------------------------- */}
+
+      <div className="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="font-semibold text-blue-900">
+              Official Public
+              Comments
+            </p>
+
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-blue-800">
+              Import official
+              comments from
+              Regulations.gov for
+              the EPA PFAS National
+              Primary Drinking Water
+              Regulation.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={
+              handleLoadOfficialComments
+            }
+            disabled={
+              !caseId ||
+              importingComments ||
+              loading
+            }
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {importingComments
+              ? "Loading official comments..."
+              : "Load from Regulations.gov"}
+          </button>
+        </div>
+
+        {importSummary && (
+          <div className="mt-4 text-sm text-blue-900">
+            <span className="font-semibold">
+              {
+                importSummary.ready
+              }
+            </span>{" "}
+            of{" "}
+            <span className="font-semibold">
+              {
+                importSummary.requested
+              }
+            </span>{" "}
+            comments are ready for
+            analysis.
+
+            {importSummary.failed >
+              0 && (
+              <span className="ml-2 text-blue-700">
+                {
+                  importSummary.failed
+                }{" "}
+                attachment
+                {importSummary.failed ===
+                1
+                  ? ""
+                  : "s"}{" "}
+                could not be
+                extracted.
+              </span>
+            )}
+          </div>
+        )}
+
+        {importError && (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {importError}
+          </div>
+        )}
+      </div>
+
+      {/* --------------------------------
+          Imported comment list
+      -------------------------------- */}
+
+      {importedComments.length >
+        0 && (
+        <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm font-semibold text-gray-800">
+              Imported official
+              comments
+            </p>
+
+            <button
+              type="button"
+              onClick={() => {
+                setImportedComments(
+                  []
+                );
+
+                setImportSummary(
+                  null
+                );
+
+                setImportError("");
+
+                setAnalysis(null);
+              }}
+              className="text-xs font-semibold text-gray-500 underline"
+            >
+              Clear
+            </button>
+          </div>
+
+          <div className="mt-3 space-y-2">
+            {importedComments.map(
+              (comment) => (
+                <div
+                  key={comment.id}
+                  className="rounded-lg border border-gray-200 bg-white px-3 py-2"
+                >
+                  <p className="text-sm font-medium text-gray-800">
+                    {
+                      comment.title
+                    }
+                  </p>
+
+                  <p className="mt-1 text-xs text-gray-500">
+                    {comment.id}
+                  </p>
+
+                  {comment.attachmentUrl && (
+                    <a
+                      href={
+                        comment.attachmentUrl
+                      }
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 inline-block text-xs font-medium text-blue-600 underline"
+                    >
+                      View source
+                      attachment
+                    </a>
+                  )}
+                </div>
+              )
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* --------------------------------
+          Manual input
+      -------------------------------- */}
+
+      <div className="mt-6 flex items-center gap-3">
+        <div className="h-px flex-1 bg-gray-200" />
+
+        <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+          Or enter comments manually
+        </span>
+
+        <div className="h-px flex-1 bg-gray-200" />
+      </div>
+
       <textarea
         value={commentsText}
-        onChange={(event) =>
+        onChange={(event) => {
           setCommentsText(
             event.target.value
-          )
-        }
+          );
+
+          /*
+           * Typing manually switches
+           * away from imported mode.
+           */
+          if (
+            importedComments.length >
+            0
+          ) {
+            setImportedComments(
+              []
+            );
+
+            setImportSummary(
+              null
+            );
+
+            setImportError("");
+          }
+
+          setAnalysis(null);
+        }}
         disabled={!caseId}
         placeholder={`I support the proposal because it will improve access to services.
 The policy will be too expensive for small organizations to implement.
@@ -214,8 +590,19 @@ I need more information about enforcement before deciding whether I support it.`
       />
 
       <div className="mt-3 text-sm text-gray-500">
-        {commentCount} separate comment
-        {commentCount === 1 ? "" : "s"} detected
+        {commentCount} comment
+        {commentCount === 1
+          ? ""
+          : "s"}{" "}
+        ready for analysis
+
+        {importedComments.length >
+          0 && (
+          <span className="ml-2 font-medium text-blue-600">
+            · Official
+            Regulations.gov source
+          </span>
+        )}
       </div>
 
       <button
@@ -226,6 +613,7 @@ I need more information about enforcement before deciding whether I support it.`
         disabled={
           !caseId ||
           loading ||
+          importingComments ||
           commentCount === 0
         }
         className="mt-4 rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
@@ -241,6 +629,10 @@ I need more information about enforcement before deciding whether I support it.`
         </div>
       )}
 
+      {/* --------------------------------
+          Existing Foundry analysis UI
+      -------------------------------- */}
+
       {analysis && (
         <div className="mt-8 space-y-8">
           <div>
@@ -251,7 +643,9 @@ I need more information about enforcement before deciding whether I support it.`
             <p className="mt-2 text-sm text-gray-600">
               Analysis covers{" "}
               <span className="font-semibold">
-                {analysis.sampleSize}
+                {
+                  analysis.sampleSize
+                }
               </span>{" "}
               submitted comments.
             </p>
@@ -263,10 +657,12 @@ I need more information about enforcement before deciding whether I support it.`
                   analysis.indexedEvidenceCount
                 }{" "}
                 comment evidence item
-                {analysis.indexedEvidenceCount === 1
+                {analysis.indexedEvidenceCount ===
+                1
                   ? ""
                   : "s"}{" "}
-                added to Azure AI Search.
+                added to Azure AI
+                Search.
               </p>
             )}
           </div>
@@ -337,11 +733,14 @@ I need more information about enforcement before deciding whether I support it.`
 
           <div>
             <h3 className="text-lg font-semibold">
-              Concern &amp; Issue Themes
+              Concern &amp; Issue
+              Themes
             </h3>
 
             <p className="mt-2 text-sm text-gray-600">
-              Every theme is linked back to the submitted comments that support
+              Every theme is linked
+              back to the submitted
+              comments that support
               it.
             </p>
 
@@ -363,7 +762,9 @@ I need more information about enforcement before deciding whether I support it.`
                     >
                       <div className="flex flex-wrap items-center gap-2">
                         <h4 className="font-semibold">
-                          {theme.label}
+                          {
+                            theme.label
+                          }
                         </h4>
 
                         <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
@@ -379,20 +780,21 @@ I need more information about enforcement before deciding whether I support it.`
 
                         {theme.lessCommon && (
                           <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-semibold text-yellow-800">
-                            Less common in this sample
+                            Less common in
+                            this sample
                           </span>
                         )}
                       </div>
 
                       <p className="mt-3 text-sm leading-6 text-gray-700">
-                        {theme.summary}
+                        {
+                          theme.summary
+                        }
                       </p>
 
                       <div className="mt-5 space-y-3">
                         {evidence.map(
-                          (
-                            item
-                          ) => (
+                          (item) => (
                             <div
                               key={
                                 item.id
@@ -401,7 +803,9 @@ I need more information about enforcement before deciding whether I support it.`
                             >
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="text-xs font-semibold text-blue-700">
-                                  {item.id}
+                                  {
+                                    item.id
+                                  }
                                 </span>
 
                                 <span
@@ -416,7 +820,9 @@ I need more information about enforcement before deciding whether I support it.`
                               </div>
 
                               <blockquote className="mt-3 border-l-4 border-blue-500 pl-4 text-sm leading-6 text-gray-700">
-                                {item.text}
+                                {
+                                  item.text
+                                }
                               </blockquote>
 
                               {item
@@ -434,7 +840,9 @@ I need more information about enforcement before deciding whether I support it.`
                                         }
                                         className="rounded-full bg-white px-2 py-1 text-xs text-gray-600"
                                       >
-                                        {tag}
+                                        {
+                                          tag
+                                        }
                                       </span>
                                     )
                                   )}
@@ -473,7 +881,9 @@ I need more information about enforcement before deciding whether I support it.`
                           item.stance
                         )}`}
                       >
-                        {item.stance}
+                        {
+                          item.stance
+                        }
                       </span>
                     </div>
 
@@ -488,7 +898,8 @@ I need more information about enforcement before deciding whether I support it.`
 
           <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-5">
             <h3 className="font-semibold text-yellow-900">
-              Interpretation Limitations
+              Interpretation
+              Limitations
             </h3>
 
             <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-yellow-900">
@@ -498,7 +909,9 @@ I need more information about enforcement before deciding whether I support it.`
                   index
                 ) => (
                   <li key={index}>
-                    {limitation}
+                    {
+                      limitation
+                    }
                   </li>
                 )
               )}

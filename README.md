@@ -1,17 +1,16 @@
-
 # CivicTrace
 
 **Evidence-grounded policy and public sentiment analysis using Microsoft Foundry, Azure AI Search, and Azure Document Intelligence.**
 
 ## Overview
 
-CivicTrace helps analysts review policy documents, public comments, and hearing testimony in one evidence-grounded workspace.
+CivicTrace helps analysts review policy documents, official public comments, and hearing testimony in one evidence-grounded workspace.
 
 Instead of generating unsupported summaries, CivicTrace links AI-generated claims back to exact source evidence such as:
 
 - Policy pages
-- Submitted public comments
-- Hearing speaker statements
+- Regulations.gov public comments and attachments
+- Timestamped hearing transcript segments
 
 The goal is to make AI-assisted policy analysis more transparent, reviewable, and useful for decision support.
 
@@ -19,13 +18,17 @@ The goal is to make AI-assisted policy analysis more transparent, reviewable, an
 
 - Upload and analyze policy PDFs
 - Extract page-aware evidence using Azure Document Intelligence
-- Index policy, public comments, and hearing testimony in Azure AI Search
-- Ask grounded questions across the full case
-- Analyze public comment stance and recurring concerns
-- Analyze public hearing testimony with speaker-linked evidence
+- Load official public comments from Regulations.gov
+- Analyze public comment stance, concerns, and recurring themes
+- Import hearing transcripts from YouTube
+- Convert captions into timestamped hearing segments
+- Analyze hearing testimony with Microsoft Foundry
+- Index policy, public comments, and hearing evidence in Azure AI Search
+- Ask grounded questions across the full policy case
 - Generate an evidence-grounded Leadership Brief
 - Display limitations and representativeness warnings
 - Validate AI-produced evidence references before showing them to users
+- Preserve manual hearing transcript entry as a fallback
 
 ## Architecture
 
@@ -34,23 +37,31 @@ Policy PDF
    ↓
 Azure Document Intelligence
    ↓
-Page-aware Evidence
+Page-aware Policy Evidence
    │
-   ├───────────────┐
-   │               │
-Public Comments    Hearing Testimony
-   │               │
-   └───────┬───────┘
-           ↓
-     Azure AI Search
-           ↓
-    Microsoft Foundry
-           ↓
- ┌─────────┼──────────────┐
- │         │              │
-Q&A     Analysis    Leadership Brief
-           ↓
-    Evidence Traceability
+   ├──────────────────────────────┐
+   │                              │
+Regulations.gov Comments     YouTube Hearing
+   │                              │
+Comment Attachments          Transcript Captions
+   │                              │
+Document Intelligence       Timestamped Segments
+   │                              │
+   └──────────────┬───────────────┘
+                  ↓
+            Azure AI Search
+                  ↓
+           Microsoft Foundry
+                  ↓
+     ┌────────────┼──────────────┐
+     │            │              │
+Policy       Public/Hearing   Cross-Source
+Analysis       Analysis           Q&A
+                  │
+                  ↓
+          Leadership Brief
+                  ↓
+        Evidence Traceability
 ```
 
 ## Technology
@@ -59,6 +70,8 @@ Q&A     Analysis    Leadership Brief
 - Azure AI Search
 - Azure AI Document Intelligence
 - Microsoft Entra ID / Azure RBAC
+- Regulations.gov API
+- SerpApi YouTube transcript retrieval
 - Next.js
 - TypeScript
 - Tailwind CSS
@@ -68,24 +81,28 @@ Q&A     Analysis    Leadership Brief
 - AI-generated claims are linked to source evidence
 - Evidence IDs are validated server-side
 - Raw evidence is separated from AI interpretation
-- Submitted feedback is not treated as representative of the broader public
+- Submitted public comments are not treated as representative of the broader public
+- Hearing transcript segments are treated as source evidence, not verified speaker identity
+- Possible misunderstandings are labeled cautiously rather than asserted as fact
 - Limitations are displayed explicitly
 - Final judgment remains with the analyst
 
 ## Demo Workflow
 
 1. Upload a policy PDF
-2. Review extracted policy evidence
-3. Add public comments
-4. Add hearing testimony
-5. Ask questions across all evidence
-6. Generate a Leadership Brief
-7. Review supporting evidence
+2. Extract and index policy evidence
+3. Load official public comments from Regulations.gov
+4. Analyze public reaction and recurring themes
+5. Import a related YouTube hearing or public-event transcript
+6. Analyze timestamped transcript segments
+7. Ask questions across policy, comments, and hearing evidence
+8. Generate a Leadership Brief
+9. Review the supporting evidence behind each insight
 
 Example question:
 
 ```text
-What implementation risks appear across the policy and public feedback?
+What implementation risks and stakeholder concerns appear across the policy, public comments, and hearing evidence?
 ```
 
 ## Demo Policy
@@ -116,10 +133,15 @@ Create a `.env.local` file:
 ```env
 FOUNDRY_PROJECT_ENDPOINT=
 FOUNDRY_MODEL_NAME=gpt-5-mini
+
 DOCUMENT_INTELLIGENCE_ENDPOINT=
 DOCUMENT_INTELLIGENCE_API_KEY=
+
 AZURE_SEARCH_ENDPOINT=
 AZURE_SEARCH_INDEX=civictrace-evidence
+
+REGULATIONS_API_KEY=
+SERPAPI_API_KEY=
 ```
 
 Sign in to Azure:
@@ -151,24 +173,28 @@ npm run build
 - Secrets are stored in `.env.local`
 - `.env.local` is excluded from Git
 - Azure AI Search uses Microsoft Entra ID / RBAC instead of API keys
+- API keys are never committed to the repository
 
 ## Status
 
 Hackathon MVP complete with:
 
 - Grounded policy analysis
-- Public sentiment analysis
+- Regulations.gov public comment ingestion
+- Public reaction and theme analysis
+- YouTube hearing transcript ingestion
 - Hearing testimony analysis
 - Unified evidence search
-- Evidence-grounded Q&A
+- Cross-source evidence-grounded Q&A
 - Leadership Brief generation
+- Source traceability across policy, comments, and hearing evidence
 
 ## Team
 
 Built for the **Policy and Public Sentiment Analyst** hackathon challenge.
 
-
 ## Acknowledgments
 
 Development assistance:
+
 - ChatGPT by OpenAI — architecture guidance, debugging support, code review, and documentation assistance

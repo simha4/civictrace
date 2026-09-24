@@ -191,7 +191,7 @@ Hackathon MVP complete with:
 
 ## Team
 
-Built for the **Policy and Public Sentiment Analyst** hackathon challenge.
+Built for the **Microsoft CCI Innovation Challenge — Policy and Public Sentiment Analyst** challenge.
 
 ## Acknowledgments
 

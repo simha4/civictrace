@@ -1,52 +1,173 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
-type HearingAnalyzerProps = {
+type Props = {
   caseId: string | null;
 };
 
+type HearingTheme = {
+  label: string;
+  summary: string;
+  evidenceIds?: string[];
+};
+
+type HearingInsight = {
+  type: string;
+  claim?: string;
+  statement?: string;
+  summary?: string;
+  evidenceIds?: string[];
+};
+
 type HearingEvidence = {
+  id: string;
+  speaker?: string;
+  text?: string;
+  content?: string;
+};
+
+type HearingAnalysis = {
+  summary?: string;
+  themes?: HearingTheme[];
+  insights?: HearingInsight[];
+  limitations?: string[];
+  evidence?: HearingEvidence[];
+  indexedEvidenceCount?: number;
+};
+
+type VideoImportResult = {
+  caseId: string;
+  videoId: string;
+  youtubeUrl: string;
+
+  source:
+    | "serpapi-manual"
+    | "serpapi-asr";
+
+  languageCode:
+    | string
+    | null;
+
+  durationSec: number;
+  suspectedTruncation: boolean;
+  snippetCount: number;
+  segmentCount: number;
+  transcriptText: string;
+
+  segments?: Array<{
+    id: string;
+    sequenceNumber: number;
+    timestamp: string;
+    startSec: number;
+    endSec: number;
+    text: string;
+  }>;
+};
+
+type TranscriptItem = {
   id: string;
   speaker: string;
   text: string;
 };
 
-type Theme = {
-  label: string;
-  summary: string;
-  evidenceIds: string[];
-};
+function parseTranscript(
+  transcript: string
+): TranscriptItem[] {
+  return transcript
+    .split("\n")
+    .map((line) =>
+      line.trim()
+    )
+    .filter(Boolean)
+    .map((line, index) => {
+      /*
+       * Expected formats:
+       *
+       * Resident 1: I support...
+       *
+       * Video Segment 1: [0:00] transcript...
+       *
+       * We split only on the FIRST colon so timestamps
+       * such as [25:34] remain inside the testimony text.
+       */
+      const separatorIndex =
+        line.indexOf(":");
 
-type Insight = {
-  type:
-    | "concern"
-    | "support"
-    | "question"
-    | "implementation_issue"
-    | "possible_misunderstanding"
-    | "other";
+      if (
+        separatorIndex <= 0
+      ) {
+        return {
+          id:
+            `hearing-${index + 1}`,
 
-  claim: string;
-  evidenceIds: string[];
-};
+          speaker:
+            `Statement ${index + 1}`,
 
-type HearingAnalysis = {
-  summary: string;
-  themes: Theme[];
-  insights: Insight[];
-  limitations: string[];
-  evidence: HearingEvidence[];
-  indexedEvidenceCount?: number;
-};
+          text:
+            line,
+        };
+      }
+
+      const speaker =
+        line
+          .slice(
+            0,
+            separatorIndex
+          )
+          .trim();
+
+      const text =
+        line
+          .slice(
+            separatorIndex + 1
+          )
+          .trim();
+
+      return {
+        id:
+          `hearing-${index + 1}`,
+
+        speaker:
+          speaker ||
+          `Statement ${index + 1}`,
+
+        text:
+          text || line,
+      };
+    });
+}
 
 export default function HearingAnalyzer({
   caseId,
-}: HearingAnalyzerProps) {
+}: Props) {
   const [
-    transcriptText,
-    setTranscriptText,
+    transcript,
+    setTranscript,
   ] = useState("");
+
+  const [
+    youtubeUrl,
+    setYoutubeUrl,
+  ] = useState("");
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
+
+  const [
+    importingVideo,
+    setImportingVideo,
+  ] = useState(false);
+
+  const [
+    error,
+    setError,
+  ] =
+    useState<string | null>(
+      null
+    );
 
   const [
     analysis,
@@ -57,111 +178,161 @@ export default function HearingAnalyzer({
     );
 
   const [
-    loading,
-    setLoading,
+    videoImport,
+    setVideoImport,
   ] =
-    useState(false);
+    useState<VideoImportResult | null>(
+      null
+    );
 
-  const [
-    error,
-    setError,
-  ] =
-    useState("");
+  const transcriptItems =
+    useMemo(
+      () =>
+        parseTranscript(
+          transcript
+        ),
+      [transcript]
+    );
 
-  function parseTranscript() {
-    return transcriptText
-      .split("\n")
-      .map((line) =>
-        line.trim()
-      )
-      .filter(Boolean)
-      .map(
-        (
-          line,
-          index
-        ) => {
-          const separatorIndex =
-            line.indexOf(
-              ":"
-            );
-
-          if (
-            separatorIndex ===
-            -1
-          ) {
-            return {
-              id: `hearing-${index + 1}`,
-
-              speaker:
-                `Speaker ${index + 1}`,
-
-              text: line,
-            };
-          }
-
-          const speaker =
-            line
-              .slice(
-                0,
-                separatorIndex
-              )
-              .trim();
-
-          const text =
-            line
-              .slice(
-                separatorIndex +
-                  1
-              )
-              .trim();
-
-          return {
-            id: `hearing-${index + 1}`,
-
-            speaker:
-              speaker ||
-              `Speaker ${index + 1}`,
-
-            text,
-          };
-        }
-      )
-      .filter(
-        (item) =>
-          item.text.length >
-          0
+  async function handleImportVideo() {
+    if (!caseId) {
+      setError(
+        "Upload a policy document first so the hearing can be attached to the current CivicTrace case."
       );
-  }
 
-  const transcript =
-    parseTranscript();
-
-  function getEvidence(
-    evidenceIds: string[]
-  ) {
-    if (!analysis) {
-      return [];
+      return;
     }
 
-    return analysis.evidence.filter(
-      (item) =>
-        evidenceIds.includes(
-          item.id
-        )
+    if (
+      !youtubeUrl.trim()
+    ) {
+      setError(
+        "Enter a YouTube hearing URL."
+      );
+
+      return;
+    }
+
+    setImportingVideo(
+      true
     );
+
+    setError(null);
+    setAnalysis(null);
+    setVideoImport(null);
+
+    try {
+      const response =
+        await fetch(
+          "/api/import-hearing-video",
+          {
+            method:
+              "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body:
+              JSON.stringify({
+                caseId,
+
+                youtubeUrl:
+                  youtubeUrl.trim(),
+              }),
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ??
+            "Unable to import the hearing video."
+        );
+      }
+
+      const imported =
+        data as VideoImportResult;
+
+      setVideoImport(
+        imported
+      );
+
+      /*
+       * The imported transcript is deliberately
+       * loaded into the same workspace used for
+       * manually entered testimony.
+       *
+       * Example:
+       *
+       * Video Segment 1: [0:00] ...
+       * Video Segment 2: [0:44] ...
+       */
+      setTranscript(
+        imported.transcriptText
+      );
+    } catch (error) {
+      setError(
+        error instanceof
+        Error
+          ? error.message
+          : "Unable to import the hearing video."
+      );
+    } finally {
+      setImportingVideo(
+        false
+      );
+    }
   }
 
-  async function analyzeHearing() {
+  async function handleAnalyze() {
+    if (!caseId) {
+      setError(
+        "Upload a policy document first so the hearing analysis can be connected to the current case."
+      );
+
+      return;
+    }
+
     if (
-      !caseId ||
-      transcript.length ===
-        0
+      transcriptItems.length ===
+      0
     ) {
+      setError(
+        "Enter or import hearing testimony first."
+      );
+
+      return;
+    }
+
+    /*
+     * This mirrors the backend schema:
+     *
+     * transcript:
+     * [
+     *   {
+     *     id: string,
+     *     speaker: string,
+     *     text: string
+     *   }
+     * ]
+     */
+    if (
+      transcriptItems.length >
+      200
+    ) {
+      setError(
+        "The hearing contains more than 200 statements. Please reduce the transcript before analysis."
+      );
+
       return;
     }
 
     setLoading(true);
-    setError("");
+    setError(null);
     setAnalysis(null);
 
     try {
@@ -169,29 +340,31 @@ export default function HearingAnalyzer({
         await fetch(
           "/api/analyze-hearing",
           {
-            method: "POST",
+            method:
+              "POST",
 
             headers: {
               "Content-Type":
                 "application/json",
             },
 
-            body: JSON.stringify({
-              caseId,
-              transcript,
-            }),
+            body:
+              JSON.stringify({
+                caseId,
+
+                transcript:
+                  transcriptItems,
+              }),
           }
         );
 
       const data =
         await response.json();
 
-      if (
-        !response.ok
-      ) {
+      if (!response.ok) {
         throw new Error(
           data.error ??
-            "Unable to analyze hearing."
+            "Unable to analyze hearing testimony."
         );
       }
 
@@ -199,15 +372,11 @@ export default function HearingAnalyzer({
         data
       );
     } catch (error) {
-      console.error(
-        "Hearing analysis error:",
-        error
-      );
-
       setError(
-        error instanceof Error
+        error instanceof
+        Error
           ? error.message
-          : "Unable to analyze hearing."
+          : "Unable to analyze hearing testimony."
       );
     } finally {
       setLoading(false);
@@ -215,310 +384,416 @@ export default function HearingAnalyzer({
   }
 
   return (
-    <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-      <p className="text-sm font-semibold uppercase tracking-wide text-blue-600">
-        Hearing Testimony Analysis
-      </p>
+    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="mb-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">
+          Public Hearing
+        </p>
 
-      <h2 className="mt-2 text-2xl font-bold">
-        Public Hearing Transcript
-      </h2>
+        <h2 className="mt-1 text-2xl font-semibold text-slate-950">
+          Public Hearing Transcript
+        </h2>
 
-      <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
-        Paste one speaker statement per line using the format
-        &quot;Speaker: testimony&quot;. CivicTrace links every generated
-        insight back to the exact speaker statement and adds that testimony to
-        the same searchable policy case.
-      </p>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+          Import a public hearing
+          from YouTube or paste
+          testimony manually.
+          CivicTrace analyzes the
+          hearing and adds the
+          evidence to the current
+          policy case.
+        </p>
+      </div>
 
-      {!caseId && (
-        <div className="mt-4 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900">
-          Upload a policy PDF first so this hearing testimony can be linked to
-          the same CivicTrace case.
+      <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-4">
+        <div className="mb-3">
+          <h3 className="font-semibold text-slate-950">
+            Import from YouTube
+          </h3>
+
+          <p className="mt-1 text-sm leading-6 text-slate-600">
+            Enter a public hearing
+            YouTube URL. CivicTrace
+            will load the available
+            transcript and place it
+            in the hearing workspace
+            below.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-3 md:flex-row">
+          <input
+            type="url"
+            value={
+              youtubeUrl
+            }
+            onChange={(
+              event
+            ) =>
+              setYoutubeUrl(
+                event.target
+                  .value
+              )
+            }
+            placeholder="https://www.youtube.com/watch?v=..."
+            className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500"
+          />
+
+          <button
+            type="button"
+            onClick={
+              handleImportVideo
+            }
+            disabled={
+              importingVideo ||
+              !caseId
+            }
+            className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {importingVideo
+              ? "Loading transcript..."
+              : "Load from YouTube"}
+          </button>
+        </div>
+
+        {!caseId && (
+          <p className="mt-3 text-sm text-amber-700">
+            Upload a policy
+            document first to
+            create a CivicTrace
+            case.
+          </p>
+        )}
+
+        {videoImport && (
+          <div className="mt-4 rounded-lg border border-blue-200 bg-white p-3 text-sm text-slate-700">
+            <p className="font-medium text-slate-900">
+              YouTube transcript
+              loaded
+            </p>
+
+            <p className="mt-1">
+              {
+                videoImport.segmentCount
+              }{" "}
+              transcript segments
+              loaded from{" "}
+              {videoImport.source ===
+              "serpapi-manual"
+                ? "manual captions"
+                : "auto-generated captions"}
+              .
+            </p>
+
+            {videoImport.languageCode && (
+              <p className="mt-1 text-xs text-slate-500">
+                Transcript
+                language:{" "}
+                {
+                  videoImport.languageCode
+                }
+              </p>
+            )}
+
+            {videoImport.suspectedTruncation && (
+              <p className="mt-2 font-medium text-amber-700">
+                Warning: this
+                transcript appears
+                unusually short.
+                Verify the source
+                video before relying
+                on the analysis.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <div className="mb-2 flex items-center justify-between gap-4">
+          <label
+            htmlFor="hearing-transcript"
+            className="block text-sm font-medium text-slate-800"
+          >
+            Hearing testimony
+          </label>
+
+          <span className="text-xs text-slate-500">
+            {
+              transcriptItems.length
+            }{" "}
+            statement
+            {transcriptItems.length ===
+            1
+              ? ""
+              : "s"}{" "}
+            detected
+          </span>
+        </div>
+
+        <textarea
+          id="hearing-transcript"
+          value={transcript}
+          onChange={(
+            event
+          ) =>
+            setTranscript(
+              event.target
+                .value
+            )
+          }
+          rows={14}
+          placeholder={`Resident 1: I support the proposal because...
+Business Owner: I am concerned about implementation costs.
+Agency Staff: The implementation period is six months.`}
+          className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm leading-6 text-slate-900 outline-none transition focus:border-blue-500"
+        />
+
+        <p className="mt-2 text-xs text-slate-500">
+          Manual input format:
+          one statement per line
+          using{" "}
+          <span className="font-medium">
+            Speaker: testimony
+          </span>
+          .
+        </p>
+      </div>
+
+      {error && (
+        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
         </div>
       )}
-
-      {caseId && (
-        <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
-          This hearing testimony will be added to the current CivicTrace case.
-        </div>
-      )}
-
-      <textarea
-        value={
-          transcriptText
-        }
-        onChange={(
-          event
-        ) =>
-          setTranscriptText(
-            event.target.value
-          )
-        }
-        disabled={!caseId}
-        placeholder={`Resident 1: I support the proposal because transit access will improve.
-Business Owner: I am concerned about the implementation cost.
-Resident 2: The deadline should be extended.
-Agency Staff: The proposed implementation period is currently six months.`}
-        className="mt-6 min-h-52 w-full rounded-xl border border-gray-300 p-4 outline-none focus:border-blue-500 disabled:bg-gray-100"
-      />
-
-      <p className="mt-3 text-sm text-gray-500">
-        {
-          transcript.length
-        }{" "}
-        speaker statement
-        {transcript.length ===
-        1
-          ? ""
-          : "s"}{" "}
-        detected
-      </p>
 
       <button
         type="button"
         onClick={
-          analyzeHearing
+          handleAnalyze
         }
         disabled={
-          !caseId ||
           loading ||
-          transcript.length ===
+          !caseId ||
+          transcriptItems.length ===
             0
         }
-        className="mt-4 rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+        className="mt-5 rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {loading
           ? "Analyzing hearing..."
           : "Analyze Hearing"}
       </button>
 
-      {error && (
-        <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
       {analysis && (
-        <div className="mt-8 space-y-8">
-          <div>
-            <h3 className="text-lg font-semibold">
-              Hearing Summary
-            </h3>
+        <div className="mt-8 space-y-7 border-t border-slate-200 pt-7">
+          {analysis.summary && (
+            <div>
+              <h3 className="text-lg font-semibold text-slate-950">
+                Hearing Summary
+              </h3>
 
-            <p className="mt-3 leading-7 text-gray-700">
-              {
-                analysis.summary
-              }
-            </p>
-
-            {typeof analysis.indexedEvidenceCount ===
-              "number" && (
-              <p className="mt-2 text-sm text-green-700">
+              <p className="mt-2 leading-7 text-slate-700">
                 {
-                  analysis.indexedEvidenceCount
-                }{" "}
-                hearing evidence item
-                {analysis.indexedEvidenceCount === 1
-                  ? ""
-                  : "s"}{" "}
-                added to Azure AI Search.
+                  analysis.summary
+                }
               </p>
+            </div>
+          )}
+
+          {Array.isArray(
+            analysis.themes
+          ) &&
+            analysis.themes
+              .length >
+              0 && (
+              <div>
+                <h3 className="text-lg font-semibold text-slate-950">
+                  Hearing Themes
+                </h3>
+
+                <div className="mt-3 grid gap-3">
+                  {analysis.themes.map(
+                    (
+                      theme,
+                      index
+                    ) => (
+                      <div
+                        key={
+                          `${theme.label}-${index}`
+                        }
+                        className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                      >
+                        <p className="font-medium text-slate-950">
+                          {
+                            theme.label
+                          }
+                        </p>
+
+                        <p className="mt-1 text-sm leading-6 text-slate-700">
+                          {
+                            theme.summary
+                          }
+                        </p>
+
+                        {theme.evidenceIds &&
+                          theme
+                            .evidenceIds
+                            .length >
+                            0 && (
+                            <p className="mt-2 text-xs text-slate-500">
+                              {
+                                theme
+                                  .evidenceIds
+                                  .length
+                              }{" "}
+                              supporting
+                              evidence{" "}
+                              {theme
+                                .evidenceIds
+                                .length ===
+                              1
+                                ? "item"
+                                : "items"}
+                            </p>
+                          )}
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
             )}
-          </div>
 
-          <div>
-            <h3 className="text-lg font-semibold">
-              Hearing Themes
-            </h3>
+          {Array.isArray(
+            analysis.insights
+          ) &&
+            analysis.insights
+              .length >
+              0 && (
+              <div>
+                <h3 className="text-lg font-semibold text-slate-950">
+                  Hearing Insights
+                </h3>
 
-            <div className="mt-4 space-y-4">
-              {analysis.themes.map(
-                (
-                  theme,
-                  index
-                ) => (
-                  <article
-                    key={`${theme.label}-${index}`}
-                    className="rounded-xl border border-gray-200 p-5"
-                  >
-                    <h4 className="font-semibold">
-                      {
-                        theme.label
-                      }
-                    </h4>
-
-                    <p className="mt-2 text-sm leading-6 text-gray-700">
-                      {
-                        theme.summary
-                      }
-                    </p>
-
-                    <div className="mt-4 space-y-3">
-                      {getEvidence(
-                        theme.evidenceIds
-                      ).map(
-                        (
-                          evidence
-                        ) => (
-                          <div
-                            key={
-                              evidence.id
-                            }
-                            className="rounded-lg bg-gray-50 p-4"
-                          >
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-xs font-semibold text-blue-700">
-                                {
-                                  evidence.id
-                                }
-                              </span>
-
-                              <span className="text-sm font-semibold">
-                                {
-                                  evidence.speaker
-                                }
-                              </span>
-                            </div>
-
-                            <blockquote className="mt-3 border-l-4 border-blue-500 pl-4 text-sm leading-6 text-gray-700">
-                              {
-                                evidence.text
-                              }
-                            </blockquote>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </article>
-                )
-              )}
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-lg font-semibold">
-              Evidence-grounded Insights
-            </h3>
-
-            <div className="mt-4 space-y-4">
-              {analysis.insights.map(
-                (
-                  insight,
-                  index
-                ) => (
-                  <article
-                    key={`${insight.type}-${index}`}
-                    className="rounded-xl border border-gray-200 p-5"
-                  >
-                    <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
-                      {insight.type.replaceAll(
-                        "_",
-                        " "
-                      )}
-                    </span>
-
-                    <p className="mt-4 font-medium leading-7">
-                      {
-                        insight.claim
-                      }
-                    </p>
-
-                    <div className="mt-4 space-y-3">
-                      {getEvidence(
-                        insight.evidenceIds
-                      ).map(
-                        (
-                          evidence
-                        ) => (
-                          <div
-                            key={
-                              evidence.id
-                            }
-                            className="rounded-lg bg-gray-50 p-4"
-                          >
-                            <p className="text-sm font-semibold">
-                              {
-                                evidence.speaker
-                              }
-                            </p>
-
-                            <p className="mt-2 text-sm leading-6 text-gray-700">
-                              {
-                                evidence.text
-                              }
-                            </p>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </article>
-                )
-              )}
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-lg font-semibold">
-              Speaker Evidence
-            </h3>
-
-            <div className="mt-4 space-y-3">
-              {analysis.evidence.map(
-                (
-                  evidence
-                ) => (
-                  <article
-                    key={
-                      evidence.id
-                    }
-                    className="rounded-xl border border-gray-200 bg-gray-50 p-4"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-semibold text-blue-700">
-                        {
-                          evidence.id
+                <div className="mt-3 grid gap-3">
+                  {analysis.insights.map(
+                    (
+                      insight,
+                      index
+                    ) => (
+                      <div
+                        key={
+                          `${insight.type}-${index}`
                         }
-                      </span>
+                        className="rounded-xl border border-slate-200 bg-white p-4"
+                      >
+                        <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+                          {
+                            insight.type
+                          }
+                        </p>
 
-                      <span className="font-semibold">
-                        {
-                          evidence.speaker
+                        <p className="mt-1 text-sm leading-6 text-slate-800">
+                          {insight.claim ??
+                            insight.statement ??
+                            insight.summary ??
+                            "Hearing insight"}
+                        </p>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
+
+          {Array.isArray(
+            analysis.evidence
+          ) &&
+            analysis.evidence
+              .length >
+              0 && (
+              <div>
+                <h3 className="text-lg font-semibold text-slate-950">
+                  Evidence
+                </h3>
+
+                <div className="mt-3 space-y-3">
+                  {analysis.evidence.map(
+                    (
+                      item,
+                      index
+                    ) => (
+                      <div
+                        key={
+                          item.id ??
+                          index
                         }
-                      </span>
-                    </div>
+                        className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                      >
+                        <p className="text-sm font-semibold text-slate-900">
+                          {item.speaker ??
+                            `Statement ${index + 1}`}
+                        </p>
 
-                    <p className="mt-3 text-sm leading-6 text-gray-700">
-                      {
-                        evidence.text
-                      }
-                    </p>
-                  </article>
-                )
-              )}
+                        <p className="mt-2 text-sm leading-6 text-slate-700">
+                          {item.text ??
+                            item.content ??
+                            ""}
+                        </p>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
+
+          {typeof analysis.indexedEvidenceCount ===
+            "number" && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+              {
+                analysis.indexedEvidenceCount
+              }{" "}
+              hearing evidence{" "}
+              {analysis.indexedEvidenceCount ===
+              1
+                ? "item"
+                : "items"}{" "}
+              added to Azure AI
+              Search.
             </div>
-          </div>
+          )}
 
-          <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-5">
-            <h3 className="font-semibold text-yellow-900">
-              Limitations
-            </h3>
+          {Array.isArray(
+            analysis.limitations
+          ) &&
+            analysis.limitations
+              .length >
+              0 && (
+              <div>
+                <h3 className="text-lg font-semibold text-slate-950">
+                  Limitations
+                </h3>
 
-            <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-yellow-900">
-              {analysis.limitations.map(
-                (
-                  limitation,
-                  index
-                ) => (
-                  <li key={index}>
-                    {
-                      limitation
-                    }
-                  </li>
-                )
-              )}
-            </ul>
-          </div>
+                <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
+                  {analysis.limitations.map(
+                    (
+                      limitation,
+                      index
+                    ) => (
+                      <li
+                        key={
+                          index
+                        }
+                      >
+                        •{" "}
+                        {
+                          limitation
+                        }
+                      </li>
+                    )
+                  )}
+                </ul>
+              </div>
+            )}
         </div>
       )}
     </section>

@@ -4,7 +4,7 @@
 
 ## Overview
 
-CivicTrace helps analysts review policy documents, official public comments, and hearing testimony in one evidence-grounded workspace.
+TRACE helps analysts review policy documents, official public comments, and hearing testimony in one evidence-grounded workspace.
 
 Instead of generating unsupported summaries, CivicTrace links AI-generated claims back to exact source evidence such as:
 

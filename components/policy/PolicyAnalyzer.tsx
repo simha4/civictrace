@@ -82,7 +82,7 @@ export default function PolicyAnalyzer() {
 
         <p className="mt-2 text-sm text-gray-600">
           Paste policy language below.
-          CivicTrace will identify the
+          TRACE will identify the
           requirement, affected stakeholders,
           confidence, and supporting evidence.
         </p>

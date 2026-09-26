@@ -6,7 +6,7 @@
 
 TRACE helps analysts review policy documents, official public comments, and hearing testimony in one evidence-grounded workspace.
 
-Instead of generating unsupported summaries, CivicTrace links AI-generated claims back to exact source evidence such as:
+Instead of generating unsupported summaries, TRACE links AI-generated claims back to exact source evidence such as:
 
 - Policy pages
 - Regulations.gov public comments and attachments
@@ -34,34 +34,34 @@ The goal is to make AI-assisted policy analysis more transparent, reviewable, an
 
 ```text
 Policy PDF
-   ↓
+    ↓
 Azure Document Intelligence
-   ↓
+    ↓
 Page-aware Policy Evidence
-   │
-   ├──────────────────────────────┐
-   │                              │
+    │
+    ├──────────────────────────────┐
+    │                              │
 Regulations.gov Comments     YouTube Hearing
-   │                              │
+    │                              │
 Comment Attachments          Transcript Captions
-   │                              │
-Document Intelligence       Timestamped Segments
-   │                              │
-   └──────────────┬───────────────┘
-                  ↓
-            Azure AI Search
-                  ↓
-           Microsoft Foundry
-                  ↓
-     ┌────────────┼──────────────┐
-     │            │              │
-Policy       Public/Hearing   Cross-Source
-Analysis       Analysis           Q&A
-                  │
-                  ↓
-          Leadership Brief
-                  ↓
-        Evidence Traceability
+    │                              │
+Document Intelligence        Timestamped Segments
+    │                              │
+    └──────────────┬───────────────┘
+                   ↓
+             Azure AI Search
+                   ↓
+            Microsoft Foundry
+                   ↓
+      ┌────────────┼──────────────┐
+      │            │              │
+   Policy     Public/Hearing   Cross-Source
+  Analysis       Analysis          Q&A
+                   │
+                   ↓
+           Leadership Brief
+                   ↓
+         Evidence Traceability
 ```
 
 ## Technology

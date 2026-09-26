@@ -60,7 +60,7 @@ export async function POST(
     ) {
       return NextResponse.json({
         answer:
-          "I could not find enough supporting evidence in this CivicTrace case to answer the question.",
+          "I could not find enough supporting evidence in this TRACE case to answer the question.",
 
         confidence:
           "low",
@@ -156,7 +156,7 @@ ${item.content}
         );
 
     const prompt = `
-You are CivicTrace, an evidence-grounded policy and public sentiment analysis assistant.
+You are TRACE, an evidence-grounded policy and public sentiment analysis assistant.
 
 Answer the user's question using ONLY the retrieved evidence below.
 

@@ -9,19 +9,11 @@ type SourceType =
 
 type Evidence = {
   id: string;
-
-  sourceType:
-    SourceType;
-
-  sourceTitle:
-    string;
-
+  sourceType: SourceType;
+  sourceTitle: string;
   pageNumber?: number;
-
   sequenceNumber?: number;
-
   speaker?: string;
-
   content: string;
 };
 
@@ -60,9 +52,7 @@ type LeadershipBriefData = {
 
 type LeadershipBriefProps = {
   caseId: string | null;
-
-  sourceTitle:
-    string | null;
+  sourceTitle: string | null;
 };
 
 export default function LeadershipBrief({
@@ -153,6 +143,55 @@ export default function LeadershipBrief({
     );
   }
 
+  function cleanEvidenceText(
+    text: string
+  ) {
+    return text
+      .replace(
+        /<!--[\s\S]*?-->/g,
+        " "
+      )
+      .replace(
+        /<[^>]*>/g,
+        " "
+      )
+      .replace(
+        /PageNumber\s*=\s*["']?\d+["']?/gi,
+        " "
+      )
+      .replace(
+        /PageBreak/gi,
+        " "
+      )
+      .replace(
+        /\s+/g,
+        " "
+      )
+      .trim();
+  }
+
+  function previewEvidence(
+    text: string,
+    maxLength = 240
+  ) {
+    const cleaned =
+      cleanEvidenceText(text);
+
+    if (
+      cleaned.length <=
+      maxLength
+    ) {
+      return cleaned;
+    }
+
+    return `${cleaned
+      .slice(
+        0,
+        maxLength
+      )
+      .trim()}…`;
+  }
+
   async function generateBrief() {
     if (!caseId) {
       return;
@@ -174,9 +213,10 @@ export default function LeadershipBrief({
                 "application/json",
             },
 
-            body: JSON.stringify({
-              caseId,
-            }),
+            body:
+              JSON.stringify({
+                caseId,
+              }),
           }
         );
 
@@ -191,15 +231,15 @@ export default function LeadershipBrief({
       }
 
       setBrief(data);
-    } catch (error) {
+    } catch (caughtError) {
       console.error(
         "Leadership brief error:",
-        error
+        caughtError
       );
 
       setError(
-        error instanceof Error
-          ? error.message
+        caughtError instanceof Error
+          ? caughtError.message
           : "Unable to generate leadership brief."
       );
     } finally {
@@ -219,98 +259,290 @@ export default function LeadershipBrief({
 
     return (
       <div>
-        <h3 className="text-lg font-semibold">
-          {title}
-        </h3>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-lg font-semibold text-slate-950">
+            {title}
+          </h3>
 
-        <div className="mt-4 space-y-4">
+          <span className="text-xs font-medium text-slate-500">
+            {items.length} item
+            {items.length === 1
+              ? ""
+              : "s"}
+          </span>
+        </div>
+
+        <div className="mt-3 space-y-3">
           {items.map(
             (
               item,
               index
-            ) => (
-              <article
-                key={`${title}-${index}`}
-                className="rounded-xl border border-gray-200 bg-white p-5"
-              >
-                <p className="font-medium leading-7 text-gray-900">
-                  {
-                    item.statement
-                  }
-                </p>
+            ) => {
+              const evidence =
+                getEvidence(
+                  item.evidenceIds
+                );
 
-                <div className="mt-4 space-y-3">
-                  {getEvidence(
-                    item.evidenceIds
-                  ).map(
-                    (
-                      evidence
-                    ) => (
-                      <div
-                        key={
-                          evidence.id
+              return (
+                <article
+                  key={`${title}-${index}`}
+                  className="rounded-xl border border-slate-200 bg-white p-4"
+                >
+                  <div className="flex gap-3">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-blue-700">
+                      {index + 1}
+                    </div>
+
+                    <p className="text-sm font-medium leading-6 text-slate-900">
+                      {
+                        item.statement
+                      }
+                    </p>
+                  </div>
+
+                  {evidence.length >
+                    0 && (
+                    <details className="mt-3 border-t border-slate-100 pt-3">
+                      <summary className="cursor-pointer text-sm font-semibold text-blue-600">
+                        Supporting evidence (
+                        {
+                          evidence.length
                         }
-                        className="rounded-lg bg-gray-50 p-4"
-                      >
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
-                            {sourceLabel(
-                              evidence
-                            )}
-                          </span>
+                        )
+                      </summary>
 
-                          <span className="text-xs text-gray-500">
-                            {
-                              evidence.sourceTitle
-                            }
-                          </span>
-                        </div>
+                      <div className="mt-3 space-y-3">
+                        {evidence.map(
+                          (
+                            evidenceItem
+                          ) => {
+                            const cleaned =
+                              cleanEvidenceText(
+                                evidenceItem.content
+                              );
 
-                        <blockquote className="mt-3 border-l-4 border-blue-500 pl-4 text-sm leading-6 text-gray-700">
-                          {
-                            evidence.content
+                            return (
+                              <div
+                                key={
+                                  evidenceItem.id
+                                }
+                                className="rounded-lg bg-slate-50 p-4"
+                              >
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                                    {sourceLabel(
+                                      evidenceItem
+                                    )}
+                                  </span>
+
+                                  <span className="max-w-full truncate text-xs text-slate-500">
+                                    {
+                                      evidenceItem.sourceTitle
+                                    }
+                                  </span>
+                                </div>
+
+                                <p className="mt-3 text-sm leading-6 text-slate-700">
+                                  {previewEvidence(
+                                    evidenceItem.content
+                                  )}
+                                </p>
+
+                                {cleaned.length >
+                                  240 && (
+                                  <details className="mt-3">
+                                    <summary className="cursor-pointer text-xs font-semibold text-slate-500 hover:text-slate-800">
+                                      View full
+                                      passage
+                                    </summary>
+
+                                    <p className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap rounded-lg bg-white p-3 text-sm leading-6 text-slate-700">
+                                      {
+                                        cleaned
+                                      }
+                                    </p>
+                                  </details>
+                                )}
+                              </div>
+                            );
                           }
-                        </blockquote>
+                        )}
                       </div>
-                    )
+                    </details>
                   )}
-                </div>
-              </article>
-            )
+                </article>
+              );
+            }
           )}
         </div>
       </div>
     );
   }
 
+  function renderCollapsedSection(
+    title: string,
+    items: BriefItem[]
+  ) {
+    if (
+      items.length === 0
+    ) {
+      return null;
+    }
+
+    return (
+      <details className="rounded-xl border border-slate-200 bg-white">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-800">
+          {title} (
+          {items.length})
+        </summary>
+
+        <div className="space-y-3 border-t border-slate-200 p-4">
+          {items.map(
+            (
+              item,
+              index
+            ) => {
+              const evidence =
+                getEvidence(
+                  item.evidenceIds
+                );
+
+              return (
+                <article
+                  key={`${title}-${index}`}
+                  className="rounded-lg bg-slate-50 p-4"
+                >
+                  <p className="text-sm font-medium leading-6 text-slate-900">
+                    {
+                      item.statement
+                    }
+                  </p>
+
+                  {evidence.length >
+                    0 && (
+                    <details className="mt-3">
+                      <summary className="cursor-pointer text-xs font-semibold text-blue-600">
+                        Supporting evidence (
+                        {
+                          evidence.length
+                        }
+                        )
+                      </summary>
+
+                      <div className="mt-3 space-y-3">
+                        {evidence.map(
+                          (
+                            evidenceItem
+                          ) => {
+                            const cleaned =
+                              cleanEvidenceText(
+                                evidenceItem.content
+                              );
+
+                            return (
+                              <div
+                                key={
+                                  evidenceItem.id
+                                }
+                                className="rounded-lg border border-slate-200 bg-white p-3"
+                              >
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                                    {sourceLabel(
+                                      evidenceItem
+                                    )}
+                                  </span>
+
+                                  <span className="text-xs text-slate-500">
+                                    {
+                                      evidenceItem.sourceTitle
+                                    }
+                                  </span>
+                                </div>
+
+                                <p className="mt-3 text-sm leading-6 text-slate-700">
+                                  {previewEvidence(
+                                    evidenceItem.content
+                                  )}
+                                </p>
+
+                                {cleaned.length >
+                                  240 && (
+                                  <details className="mt-3">
+                                    <summary className="cursor-pointer text-xs font-semibold text-slate-500 hover:text-slate-800">
+                                      View full
+                                      passage
+                                    </summary>
+
+                                    <p className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm leading-6 text-slate-700">
+                                      {
+                                        cleaned
+                                      }
+                                    </p>
+                                  </details>
+                                )}
+                              </div>
+                            );
+                          }
+                        )}
+                      </div>
+                    </details>
+                  )}
+                </article>
+              );
+            }
+          )}
+        </div>
+      </details>
+    );
+  }
+
   return (
-    <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-      <p className="text-sm font-semibold uppercase tracking-wide text-blue-600">
-        Unified Evidence Brief
-      </p>
+    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">
+          Unified evidence brief
+        </p>
 
-      <h2 className="mt-2 text-2xl font-bold">
-        Leadership Brief
-      </h2>
+        <h2 className="mt-1 text-2xl font-semibold text-slate-950">
+          Leadership Brief
+        </h2>
 
-      <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
-        Generate a concise evidence-grounded brief across the policy document,
-        submitted public comments, and hearing testimony.
-      </p>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+          Generate a concise,
+          evidence-grounded summary
+          across policy, public
+          comments, and hearing
+          testimony.
+        </p>
+      </div>
 
       {caseId ? (
-        <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
-          Brief will use all evidence in the current CivicTrace case, anchored
-          to{" "}
-          <span className="font-semibold">
-            {sourceTitle ??
-              "the uploaded policy document"}
-          </span>
-          .
+        <div className="mt-5 flex flex-wrap items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+
+          Using evidence from
+          the current TRACE case
+
+          {sourceTitle && (
+            <>
+              <span className="text-emerald-400">
+                ·
+              </span>
+
+              <span className="font-medium">
+                {
+                  sourceTitle
+                }
+              </span>
+            </>
+          )}
         </div>
       ) : (
-        <div className="mt-4 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900">
-          Upload a policy PDF first to create a CivicTrace case.
+        <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          Upload a policy PDF
+          first to create a
+          TRACE case.
         </div>
       )}
 
@@ -323,39 +555,45 @@ export default function LeadershipBrief({
           !caseId ||
           loading
         }
-        className="mt-5 rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+        className="mt-5 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {loading
-          ? "Generating brief..."
+          ? "Generating..."
           : "Generate Leadership Brief"}
       </button>
 
       {error && (
-        <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {error}
         </div>
       )}
 
       {brief && (
-        <div className="mt-8 space-y-8">
-          <div className="rounded-xl border border-blue-100 bg-blue-50 p-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
-              Executive Summary
-            </p>
+        <div className="mt-8 space-y-7 border-t border-slate-200 pt-7">
+          {/* Executive summary */}
 
-            <p className="mt-3 leading-7 text-gray-900">
+          <div className="rounded-xl border border-blue-100 bg-blue-50 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                Executive summary
+              </p>
+
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-700">
+                {
+                  brief.evidenceCount
+                }{" "}
+                evidence items
+              </span>
+            </div>
+
+            <p className="mt-3 max-w-5xl leading-7 text-slate-900">
               {
                 brief.executiveSummary
               }
             </p>
-
-            <p className="mt-3 text-xs text-blue-700">
-              {
-                brief.evidenceCount
-              }{" "}
-              indexed evidence items reviewed
-            </p>
           </div>
+
+          {/* Core sections */}
 
           {renderSection(
             "Policy Snapshot",
@@ -377,38 +615,55 @@ export default function LeadershipBrief({
             brief.implementationIssues
           )}
 
-          {renderSection(
+          {/* Secondary sections */}
+
+          {renderCollapsedSection(
             "Less-common Views in This Sample",
             brief.lessCommonViews
           )}
 
-          <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-5">
-            <h3 className="font-semibold text-yellow-900">
-              Limitations
-            </h3>
-
-            <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-yellow-900">
-              {brief.limitations.map(
-                (
-                  limitation,
-                  index
-                ) => (
-                  <li key={index}>
-                    {
-                      limitation
-                    }
-                  </li>
+          {brief.limitations
+            .length >
+            0 && (
+            <details className="rounded-xl border border-amber-200 bg-amber-50">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-amber-900">
+                Limitations (
+                {
+                  brief.limitations
+                    .length
+                }
                 )
-              )}
-            </ul>
-          </div>
+              </summary>
 
-          <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm leading-6 text-gray-600">
-            This brief is AI-generated from indexed case evidence. It summarizes
-            the submitted record and does not make or recommend a policy
-            decision. Analysts should review the cited source evidence before
-            relying on individual conclusions.
-          </div>
+              <ul className="space-y-2 border-t border-amber-200 px-5 py-4 text-sm leading-6 text-amber-900">
+                {brief.limitations.map(
+                  (
+                    limitation,
+                    index
+                  ) => (
+                    <li
+                      key={
+                        index
+                      }
+                    >
+                      •{" "}
+                      {
+                        limitation
+                      }
+                    </li>
+                  )
+                )}
+              </ul>
+            </details>
+          )}
+
+          <p className="text-xs leading-5 text-slate-500">
+            TRACE summarizes
+            indexed case evidence.
+            Review supporting
+            sources before relying
+            on individual findings.
+          </p>
         </div>
       )}
     </section>

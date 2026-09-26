@@ -286,7 +286,7 @@ export async function POST(
 
     /*
      * Retrieve every evidence item associated with
-     * this CivicTrace case.
+     * this TRACE case.
      */
     const evidence =
       await getCaseEvidence(
@@ -299,7 +299,7 @@ export async function POST(
       return NextResponse.json(
         {
           error:
-            "No evidence exists for this CivicTrace case.",
+            "No evidence exists for this TRACE case.",
         },
         {
           status: 404,
@@ -317,7 +317,7 @@ export async function POST(
         );
 
     const prompt = `
-You are CivicTrace, an evidence-grounded policy and public sentiment analysis assistant.
+You are TRACE, an evidence-grounded policy and public sentiment analysis assistant.
 
 Create a concise leadership brief using ONLY the evidence supplied below.
 

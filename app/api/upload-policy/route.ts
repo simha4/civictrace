@@ -90,7 +90,7 @@ export async function POST(
       );
     }
 
-    // 2. Create a unique CivicTrace case
+    // 2. Create a unique TRACE case
     const caseId =
       randomUUID();
 

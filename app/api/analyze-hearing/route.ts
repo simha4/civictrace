@@ -126,7 +126,7 @@ ${item.text}
         );
 
     const prompt = `
-You are CivicTrace, an evidence-grounded public hearing analysis assistant.
+You are TRACE, an evidence-grounded public hearing analysis assistant.
 
 Analyze ONLY the supplied testimony.
 

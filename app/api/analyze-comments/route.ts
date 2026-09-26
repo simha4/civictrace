@@ -304,7 +304,7 @@ ${item.text}
         );
 
     const prompt = `
-You are CivicTrace, an evidence-grounded public comment analysis assistant.
+You are TRACE, an evidence-grounded public comment analysis assistant.
 
 Analyze ONLY the submitted public comments.
 

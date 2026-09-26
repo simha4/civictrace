@@ -127,9 +127,9 @@ export default function PublicCommentsAnalyzer({
   }
 
   /*
-   * Imported comments may contain many
-   * lines, so keep each extracted document
-   * as ONE comment.
+   * Imported comments can contain
+   * multiple pages. Keep each imported
+   * submission as one comment.
    */
   const comments =
     importedComments.length > 0
@@ -157,21 +157,95 @@ export default function PublicCommentsAnalyzer({
     );
   }
 
+  /*
+   * Regulations.gov PDF extraction can
+   * include HTML fragments, page markers,
+   * headers, and excessive whitespace.
+   *
+   * Clean those only for display.
+   * The original text is still sent to
+   * the analysis API and indexed.
+   */
+  function cleanCommentText(
+    text: string
+  ) {
+    return text
+      .replace(
+        /<!--[\s\S]*?-->/g,
+        " "
+      )
+      .replace(
+        /<[^>]*>/g,
+        " "
+      )
+      .replace(
+        /PageNumber\s*=\s*["']?\d+["']?/gi,
+        " "
+      )
+      .replace(
+        /PageBreak/gi,
+        " "
+      )
+      .replace(
+        /PageHeader\s*=\s*["'][^"']*["']/gi,
+        " "
+      )
+      .replace(
+        /&nbsp;/gi,
+        " "
+      )
+      .replace(
+        /&amp;/gi,
+        "&"
+      )
+      .replace(
+        /&lt;/gi,
+        "<"
+      )
+      .replace(
+        /&gt;/gi,
+        ">"
+      )
+      .replace(
+        /\s+/g,
+        " "
+      )
+      .trim();
+  }
+
+  function previewComment(
+    text: string,
+    maxLength = 300
+  ) {
+    const cleaned =
+      cleanCommentText(text);
+
+    if (
+      cleaned.length <= maxLength
+    ) {
+      return cleaned;
+    }
+
+    return `${cleaned
+      .slice(0, maxLength)
+      .trim()}…`;
+  }
+
   function stanceClasses(
     stance: Stance
   ) {
     switch (stance) {
       case "support":
-        return "bg-green-100 text-green-800";
+        return "border-emerald-200 bg-emerald-50 text-emerald-700";
 
       case "oppose":
-        return "bg-red-100 text-red-800";
+        return "border-red-200 bg-red-50 text-red-700";
 
       case "mixed":
-        return "bg-purple-100 text-purple-800";
+        return "border-purple-200 bg-purple-50 text-purple-700";
 
       default:
-        return "bg-gray-100 text-gray-700";
+        return "border-slate-200 bg-slate-50 text-slate-600";
     }
   }
 
@@ -247,8 +321,8 @@ export default function PublicCommentsAnalyzer({
       );
 
       /*
-       * Switch away from manual input
-       * when official comments are loaded.
+       * Switch away from manual mode
+       * when official comments load.
        */
       setCommentsText("");
 
@@ -271,15 +345,15 @@ export default function PublicCommentsAnalyzer({
           "No Regulations.gov comments could be prepared for analysis."
         );
       }
-    } catch (error) {
+    } catch (caughtError) {
       console.error(
         "Official comment import error:",
-        error
+        caughtError
       );
 
       setImportError(
-        error instanceof Error
-          ? error.message
+        caughtError instanceof Error
+          ? caughtError.message
           : "Unable to load official comments."
       );
     } finally {
@@ -329,15 +403,15 @@ export default function PublicCommentsAnalyzer({
       }
 
       setAnalysis(data);
-    } catch (error) {
+    } catch (caughtError) {
       console.error(
         "Comment analysis error:",
-        error
+        caughtError
       );
 
       setError(
-        error instanceof Error
-          ? error.message
+        caughtError instanceof Error
+          ? caughtError.message
           : "Unable to analyze comments."
       );
     } finally {
@@ -346,64 +420,56 @@ export default function PublicCommentsAnalyzer({
   }
 
   return (
-    <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      {/* Header */}
+
       <div>
-        <p className="text-sm font-semibold uppercase tracking-wide text-blue-600">
-          Public Sentiment Analysis
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">
+          Public sentiment
         </p>
 
-        <h2 className="mt-2 text-2xl font-bold">
+        <h2 className="mt-1 text-2xl font-semibold text-slate-950">
           Public Comments
         </h2>
 
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
-          Load official public
-          comments from
-          Regulations.gov or enter
-          comments manually.
-          CivicTrace classifies
-          expressed stance, detects
-          recurring concerns, and
-          links interpretations back
-          to the submitted evidence.
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+          Analyze official public
+          comments and identify expressed
+          stance, recurring concerns, and
+          evidence-backed themes.
         </p>
       </div>
 
+      {/* Case status */}
+
       {!caseId && (
-        <div className="mt-4 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900">
-          Upload a policy PDF first
-          so these comments can be
-          linked to the same
-          CivicTrace case and indexed
-          together in Azure AI Search.
+        <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          Upload a policy PDF first to
+          create a TRACE case.
         </div>
       )}
 
       {caseId && (
-        <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
-          These comments will be
-          added to the current
-          CivicTrace case.
+        <div className="mt-5 flex items-center gap-2 text-sm text-emerald-700">
+          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+
+          Connected to the current TRACE
+          case
         </div>
       )}
 
-      {/* --------------------------------
-          Regulations.gov import
-      -------------------------------- */}
+      {/* Regulations.gov */}
 
-      <div className="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50 p-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="font-semibold text-blue-900">
-              Official Public
-              Comments
+            <p className="font-semibold text-slate-900">
+              Regulations.gov
             </p>
 
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-blue-800">
-              Import official
-              comments from
-              Regulations.gov for
-              the EPA PFAS National
+            <p className="mt-1 max-w-xl text-sm leading-6 text-slate-600">
+              Import official comments
+              for the EPA PFAS National
               Primary Drinking Water
               Regulation.
             </p>
@@ -419,43 +485,30 @@ export default function PublicCommentsAnalyzer({
               importingComments ||
               loading
             }
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="shrink-0 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {importingComments
-              ? "Loading official comments..."
-              : "Load from Regulations.gov"}
+              ? "Loading..."
+              : "Load official comments"}
           </button>
         </div>
 
         {importSummary && (
-          <div className="mt-4 text-sm text-blue-900">
-            <span className="font-semibold">
+          <div className="mt-4 flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full bg-white px-3 py-1.5 font-semibold text-blue-700">
               {
                 importSummary.ready
-              }
-            </span>{" "}
-            of{" "}
-            <span className="font-semibold">
-              {
-                importSummary.requested
-              }
-            </span>{" "}
-            comments are ready for
-            analysis.
+              }{" "}
+              ready
+            </span>
 
             {importSummary.failed >
               0 && (
-              <span className="ml-2 text-blue-700">
+              <span className="rounded-full bg-white px-3 py-1.5 font-semibold text-amber-700">
                 {
                   importSummary.failed
                 }{" "}
-                attachment
-                {importSummary.failed ===
-                1
-                  ? ""
-                  : "s"}{" "}
-                could not be
-                extracted.
+                skipped
               </span>
             )}
           </div>
@@ -468,18 +521,55 @@ export default function PublicCommentsAnalyzer({
         )}
       </div>
 
-      {/* --------------------------------
-          Imported comment list
-      -------------------------------- */}
+      {/* Imported sources */}
 
       {importedComments.length >
         0 && (
-        <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
-          <div className="flex items-center justify-between gap-4">
-            <p className="text-sm font-semibold text-gray-800">
-              Imported official
-              comments
-            </p>
+        <details className="mt-4 rounded-xl border border-slate-200 bg-white">
+          <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700">
+            Imported comments (
+            {
+              importedComments.length
+            }
+            )
+          </summary>
+
+          <div className="border-t border-slate-200 p-4">
+            <div className="space-y-2">
+              {importedComments.map(
+                (comment) => (
+                  <div
+                    key={comment.id}
+                    className="flex flex-col gap-2 rounded-lg bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-slate-800">
+                        {
+                          comment.title
+                        }
+                      </p>
+
+                      <p className="mt-1 text-xs text-slate-500">
+                        {comment.id}
+                      </p>
+                    </div>
+
+                    {comment.attachmentUrl && (
+                      <a
+                        href={
+                          comment.attachmentUrl
+                        }
+                        target="_blank"
+                        rel="noreferrer"
+                        className="shrink-0 text-xs font-semibold text-blue-600 hover:underline"
+                      >
+                        View source
+                      </a>
+                    )}
+                  </div>
+                )
+              )}
+            </div>
 
             <button
               type="button"
@@ -496,189 +586,141 @@ export default function PublicCommentsAnalyzer({
 
                 setAnalysis(null);
               }}
-              className="text-xs font-semibold text-gray-500 underline"
+              className="mt-4 text-xs font-semibold text-slate-500 hover:text-slate-800"
             >
-              Clear
+              Clear imported comments
             </button>
           </div>
-
-          <div className="mt-3 space-y-2">
-            {importedComments.map(
-              (comment) => (
-                <div
-                  key={comment.id}
-                  className="rounded-lg border border-gray-200 bg-white px-3 py-2"
-                >
-                  <p className="text-sm font-medium text-gray-800">
-                    {
-                      comment.title
-                    }
-                  </p>
-
-                  <p className="mt-1 text-xs text-gray-500">
-                    {comment.id}
-                  </p>
-
-                  {comment.attachmentUrl && (
-                    <a
-                      href={
-                        comment.attachmentUrl
-                      }
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-1 inline-block text-xs font-medium text-blue-600 underline"
-                    >
-                      View source
-                      attachment
-                    </a>
-                  )}
-                </div>
-              )
-            )}
-          </div>
-        </div>
+        </details>
       )}
 
-      {/* --------------------------------
-          Manual input
-      -------------------------------- */}
+      {/* Manual comments */}
 
-      <div className="mt-6 flex items-center gap-3">
-        <div className="h-px flex-1 bg-gray-200" />
+      <details className="mt-4 rounded-xl border border-slate-200 bg-white">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700">
+          Enter comments manually
+        </summary>
 
-        <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-          Or enter comments manually
-        </span>
+        <div className="border-t border-slate-200 p-4">
+          <p className="mb-3 text-xs leading-5 text-slate-500">
+            Enter one comment per line.
+            Manual input replaces imported
+            comments.
+          </p>
 
-        <div className="h-px flex-1 bg-gray-200" />
-      </div>
+          <textarea
+            value={commentsText}
+            onChange={(event) => {
+              setCommentsText(
+                event.target.value
+              );
 
-      <textarea
-        value={commentsText}
-        onChange={(event) => {
-          setCommentsText(
-            event.target.value
-          );
+              if (
+                importedComments.length >
+                0
+              ) {
+                setImportedComments(
+                  []
+                );
 
-          /*
-           * Typing manually switches
-           * away from imported mode.
-           */
-          if (
-            importedComments.length >
-            0
-          ) {
-            setImportedComments(
-              []
-            );
+                setImportSummary(
+                  null
+                );
 
-            setImportSummary(
-              null
-            );
+                setImportError("");
+              }
 
-            setImportError("");
-          }
-
-          setAnalysis(null);
-        }}
-        disabled={!caseId}
-        placeholder={`I support the proposal because it will improve access to services.
+              setAnalysis(null);
+            }}
+            disabled={!caseId}
+            placeholder={`I support the proposal because it will improve access to services.
 The policy will be too expensive for small organizations to implement.
-I support the overall goal, but the compliance deadline is too short.
-I need more information about enforcement before deciding whether I support it.`}
-        className="mt-6 min-h-48 w-full rounded-xl border border-gray-300 p-4 outline-none focus:border-blue-500 disabled:bg-gray-100"
-      />
+I support the overall goal, but the compliance deadline is too short.`}
+            className="min-h-40 w-full rounded-xl border border-slate-300 p-4 text-sm outline-none transition focus:border-blue-500 disabled:bg-slate-100"
+          />
+        </div>
+      </details>
 
-      <div className="mt-3 text-sm text-gray-500">
-        {commentCount} comment
-        {commentCount === 1
-          ? ""
-          : "s"}{" "}
-        ready for analysis
+      {/* Analyze */}
 
-        {importedComments.length >
-          0 && (
-          <span className="ml-2 font-medium text-blue-600">
-            · Official
-            Regulations.gov source
-          </span>
+      <div className="mt-5 flex flex-wrap items-center gap-4">
+        <button
+          type="button"
+          onClick={handleAnalyze}
+          disabled={
+            !caseId ||
+            loading ||
+            importingComments ||
+            commentCount === 0
+          }
+          className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {loading
+            ? "Analyzing..."
+            : "Analyze Public Sentiment"}
+        </button>
+
+        {commentCount > 0 && (
+          <p className="text-sm text-slate-500">
+            {commentCount} comment
+            {commentCount === 1
+              ? ""
+              : "s"}{" "}
+            ready
+          </p>
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={
-          handleAnalyze
-        }
-        disabled={
-          !caseId ||
-          loading ||
-          importingComments ||
-          commentCount === 0
-        }
-        className="mt-4 rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {loading
-          ? "Analyzing comments..."
-          : "Analyze Public Sentiment"}
-      </button>
-
       {error && (
-        <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {error}
         </div>
       )}
 
-      {/* --------------------------------
-          Existing Foundry analysis UI
-      -------------------------------- */}
+      {/* Results */}
 
       {analysis && (
-        <div className="mt-8 space-y-8">
-          <div>
-            <h3 className="text-lg font-semibold">
-              Submitted Sample
-            </h3>
+        <div className="mt-8 space-y-8 border-t border-slate-200 pt-7">
+          {/* Sample status */}
 
-            <p className="mt-2 text-sm text-gray-600">
-              Analysis covers{" "}
-              <span className="font-semibold">
-                {
-                  analysis.sampleSize
-                }
-              </span>{" "}
-              submitted comments.
-            </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700">
+              {
+                analysis.sampleSize
+              }{" "}
+              submitted comments
+            </span>
 
             {typeof analysis.indexedEvidenceCount ===
               "number" && (
-              <p className="mt-1 text-sm text-green-700">
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
                 {
                   analysis.indexedEvidenceCount
                 }{" "}
-                comment evidence item
-                {analysis.indexedEvidenceCount ===
-                1
-                  ? ""
-                  : "s"}{" "}
-                added to Azure AI
-                Search.
-              </p>
+                indexed
+              </span>
             )}
           </div>
 
+          {/* Stance */}
+
           <div>
-            <h3 className="text-lg font-semibold">
-              Expressed Stance
+            <h3 className="text-lg font-semibold text-slate-950">
+              Expressed stance
             </h3>
 
-            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-xl border border-green-200 bg-green-50 p-4">
-                <p className="text-sm font-medium text-green-800">
+            <p className="mt-1 text-sm text-slate-500">
+              Counts describe only the
+              submitted sample.
+            </p>
+
+            <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
                   Support
                 </p>
 
-                <p className="mt-2 text-3xl font-bold text-green-900">
+                <p className="mt-2 text-2xl font-bold text-emerald-900">
                   {
                     analysis
                       .stanceCounts
@@ -688,11 +730,11 @@ I need more information about enforcement before deciding whether I support it.`
               </div>
 
               <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-                <p className="text-sm font-medium text-red-800">
+                <p className="text-xs font-semibold uppercase tracking-wide text-red-700">
                   Oppose
                 </p>
 
-                <p className="mt-2 text-3xl font-bold text-red-900">
+                <p className="mt-2 text-2xl font-bold text-red-900">
                   {
                     analysis
                       .stanceCounts
@@ -702,11 +744,11 @@ I need more information about enforcement before deciding whether I support it.`
               </div>
 
               <div className="rounded-xl border border-purple-200 bg-purple-50 p-4">
-                <p className="text-sm font-medium text-purple-800">
+                <p className="text-xs font-semibold uppercase tracking-wide text-purple-700">
                   Mixed
                 </p>
 
-                <p className="mt-2 text-3xl font-bold text-purple-900">
+                <p className="mt-2 text-2xl font-bold text-purple-900">
                   {
                     analysis
                       .stanceCounts
@@ -715,12 +757,12 @@ I need more information about enforcement before deciding whether I support it.`
                 </p>
               </div>
 
-              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                <p className="text-sm font-medium text-gray-700">
-                  Neutral / unclear
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Neutral
                 </p>
 
-                <p className="mt-2 text-3xl font-bold text-gray-900">
+                <p className="mt-2 text-2xl font-bold text-slate-900">
                   {
                     analysis
                       .stanceCounts
@@ -731,20 +773,37 @@ I need more information about enforcement before deciding whether I support it.`
             </div>
           </div>
 
+          {/* Themes */}
+
           <div>
-            <h3 className="text-lg font-semibold">
-              Concern &amp; Issue
-              Themes
-            </h3>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-950">
+                  Concern & Issue
+                  Themes
+                </h3>
 
-            <p className="mt-2 text-sm text-gray-600">
-              Every theme is linked
-              back to the submitted
-              comments that support
-              it.
-            </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Key patterns identified
+                  in the submitted
+                  comments.
+                </p>
+              </div>
 
-            <div className="mt-4 space-y-5">
+              <span className="text-xs font-medium text-slate-500">
+                {
+                  analysis.themes
+                    .length
+                }{" "}
+                theme
+                {analysis.themes
+                  .length === 1
+                  ? ""
+                  : "s"}
+              </span>
+            </div>
+
+            <div className="mt-4 space-y-4">
               {analysis.themes.map(
                 (
                   theme,
@@ -758,16 +817,16 @@ I need more information about enforcement before deciding whether I support it.`
                   return (
                     <article
                       key={`${theme.label}-${index}`}
-                      className="rounded-xl border border-gray-200 p-5"
+                      className="rounded-xl border border-slate-200 bg-white p-5"
                     >
                       <div className="flex flex-wrap items-center gap-2">
-                        <h4 className="font-semibold">
+                        <h4 className="font-semibold text-slate-950">
                           {
                             theme.label
                           }
                         </h4>
 
-                        <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                        <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
                           {
                             theme.evidenceCount
                           }{" "}
@@ -779,79 +838,117 @@ I need more information about enforcement before deciding whether I support it.`
                         </span>
 
                         {theme.lessCommon && (
-                          <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-semibold text-yellow-800">
-                            Less common in
-                            this sample
+                          <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                            Less common
                           </span>
                         )}
                       </div>
 
-                      <p className="mt-3 text-sm leading-6 text-gray-700">
+                      <p className="mt-3 max-w-4xl text-sm leading-6 text-slate-600">
                         {
                           theme.summary
                         }
                       </p>
 
-                      <div className="mt-5 space-y-3">
-                        {evidence.map(
-                          (item) => (
-                            <div
-                              key={
-                                item.id
-                              }
-                              className="rounded-lg bg-gray-50 p-4"
-                            >
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="text-xs font-semibold text-blue-700">
-                                  {
-                                    item.id
-                                  }
-                                </span>
+                      {evidence.length >
+                        0 && (
+                        <details className="mt-4 border-t border-slate-100 pt-4">
+                          <summary className="cursor-pointer text-sm font-semibold text-blue-600">
+                            View supporting
+                            comments (
+                            {
+                              evidence.length
+                            }
+                            )
+                          </summary>
 
-                                <span
-                                  className={`rounded-full px-2 py-1 text-xs font-semibold capitalize ${stanceClasses(
-                                    item.stance
-                                  )}`}
-                                >
-                                  {
-                                    item.stance
-                                  }
-                                </span>
-                              </div>
+                          <div className="mt-4 space-y-3">
+                            {evidence.map(
+                              (
+                                item
+                              ) => {
+                                const cleaned =
+                                  cleanCommentText(
+                                    item.text
+                                  );
 
-                              <blockquote className="mt-3 border-l-4 border-blue-500 pl-4 text-sm leading-6 text-gray-700">
-                                {
-                                  item.text
-                                }
-                              </blockquote>
-
-                              {item
-                                .concernTags
-                                .length >
-                                0 && (
-                                <div className="mt-3 flex flex-wrap gap-2">
-                                  {item.concernTags.map(
-                                    (
-                                      tag
-                                    ) => (
-                                      <span
-                                        key={
-                                          tag
-                                        }
-                                        className="rounded-full bg-white px-2 py-1 text-xs text-gray-600"
-                                      >
+                                return (
+                                  <div
+                                    key={
+                                      item.id
+                                    }
+                                    className="rounded-lg border border-slate-200 bg-slate-50 p-4"
+                                  >
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="text-xs font-semibold text-blue-700">
                                         {
-                                          tag
+                                          item.id
                                         }
                                       </span>
-                                    )
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          )
-                        )}
-                      </div>
+
+                                      <span
+                                        className={`rounded-full border px-2 py-1 text-xs font-semibold capitalize ${stanceClasses(
+                                          item.stance
+                                        )}`}
+                                      >
+                                        {
+                                          item.stance
+                                        }
+                                      </span>
+                                    </div>
+
+                                    <p className="mt-3 text-sm leading-6 text-slate-700">
+                                      {previewComment(
+                                        item.text
+                                      )}
+                                    </p>
+
+                                    {cleaned.length >
+                                      300 && (
+                                      <details className="mt-3">
+                                        <summary className="cursor-pointer text-xs font-semibold text-slate-500 hover:text-slate-800">
+                                          View full
+                                          comment
+                                        </summary>
+
+                                        <p className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap rounded-lg bg-white p-3 text-sm leading-6 text-slate-700">
+                                          {
+                                            cleaned
+                                          }
+                                        </p>
+                                      </details>
+                                    )}
+
+                                    {item
+                                      .concernTags
+                                      .length >
+                                      0 && (
+                                      <div className="mt-3 flex flex-wrap gap-2">
+                                        {item.concernTags.map(
+                                          (
+                                            tag
+                                          ) => (
+                                            <span
+                                              key={
+                                                tag
+                                              }
+                                              className="rounded-full bg-white px-2.5 py-1 text-xs text-slate-500"
+                                            >
+                                              {
+                                                tag
+                                              }
+                                            </span>
+                                          )
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              }
+                            )}
+                          </div>
+                        </details>
+                      )}
                     </article>
                   );
                 }
@@ -859,64 +956,145 @@ I need more information about enforcement before deciding whether I support it.`
             </div>
           </div>
 
-          <div>
-            <h3 className="text-lg font-semibold">
-              Comment Evidence
-            </h3>
+          {/* Full evidence */}
 
-            <div className="mt-4 space-y-3">
-              {analysis.evidence.map(
-                (item) => (
-                  <article
-                    key={item.id}
-                    className="rounded-xl border border-gray-200 bg-gray-50 p-4"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-semibold text-blue-700">
-                        {item.id}
-                      </span>
+          {analysis.evidence.length >
+            0 && (
+            <details className="rounded-xl border border-slate-200 bg-white">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700">
+                All comment evidence (
+                {
+                  analysis.evidence
+                    .length
+                }
+                )
+              </summary>
 
-                      <span
-                        className={`rounded-full px-2 py-1 text-xs font-semibold capitalize ${stanceClasses(
-                          item.stance
-                        )}`}
-                      >
-                        {
-                          item.stance
+              <div className="space-y-3 border-t border-slate-200 p-4">
+                {analysis.evidence.map(
+                  (item) => {
+                    const cleaned =
+                      cleanCommentText(
+                        item.text
+                      );
+
+                    return (
+                      <article
+                        key={
+                          item.id
                         }
-                      </span>
-                    </div>
+                        className="rounded-lg bg-slate-50 p-4"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-semibold text-blue-700">
+                            {
+                              item.id
+                            }
+                          </span>
 
-                    <p className="mt-3 text-sm leading-6 text-gray-700">
-                      {item.text}
-                    </p>
-                  </article>
-                )
-              )}
-            </div>
-          </div>
+                          <span
+                            className={`rounded-full border px-2 py-1 text-xs font-semibold capitalize ${stanceClasses(
+                              item.stance
+                            )}`}
+                          >
+                            {
+                              item.stance
+                            }
+                          </span>
+                        </div>
 
-          <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-5">
-            <h3 className="font-semibold text-yellow-900">
-              Interpretation
-              Limitations
-            </h3>
+                        <p className="mt-3 text-sm leading-6 text-slate-700">
+                          {previewComment(
+                            item.text
+                          )}
+                        </p>
 
-            <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-yellow-900">
-              {analysis.limitations.map(
-                (
-                  limitation,
-                  index
-                ) => (
-                  <li key={index}>
-                    {
-                      limitation
-                    }
-                  </li>
-                )
-              )}
-            </ul>
-          </div>
+                        {cleaned.length >
+                          300 && (
+                          <details className="mt-3">
+                            <summary className="cursor-pointer text-xs font-semibold text-slate-500 hover:text-slate-800">
+                              View full
+                              comment
+                            </summary>
+
+                            <p className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap rounded-lg bg-white p-3 text-sm leading-6 text-slate-700">
+                              {
+                                cleaned
+                              }
+                            </p>
+                          </details>
+                        )}
+
+                        {item
+                          .concernTags
+                          .length >
+                          0 && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {item.concernTags.map(
+                              (
+                                tag
+                              ) => (
+                                <span
+                                  key={
+                                    tag
+                                  }
+                                  className="rounded-full bg-white px-2.5 py-1 text-xs text-slate-500"
+                                >
+                                  {
+                                    tag
+                                  }
+                                </span>
+                              )
+                            )}
+                          </div>
+                        )}
+                      </article>
+                    );
+                  }
+                )}
+              </div>
+            </details>
+          )}
+
+          {/* Limitations */}
+
+          {analysis.limitations.length >
+            0 && (
+            <details className="rounded-xl border border-amber-200 bg-amber-50">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-amber-900">
+                Interpretation
+                limitations
+              </summary>
+
+              <ul className="space-y-2 border-t border-amber-200 px-5 py-4 text-sm leading-6 text-amber-900">
+                {analysis.limitations.map(
+                  (
+                    limitation,
+                    index
+                  ) => (
+                    <li
+                      key={
+                        index
+                      }
+                    >
+                      •{" "}
+                      {
+                        limitation
+                      }
+                    </li>
+                  )
+                )}
+              </ul>
+            </details>
+          )}
+
+          <p className="text-xs leading-5 text-slate-500">
+            Results summarize only the
+            submitted comments and should
+            not be treated as
+            representative of the broader
+            public.
+          </p>
         </div>
       )}
     </section>

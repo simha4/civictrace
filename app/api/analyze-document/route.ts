@@ -69,7 +69,7 @@ export async function POST(request: Request) {
       .join("\n\n---\n\n");
 
     const prompt = `
-You are CivicTrace, an evidence-grounded policy analysis assistant.
+You are TRACE, an evidence-grounded policy analysis assistant.
 
 Analyze the document evidence below.
 

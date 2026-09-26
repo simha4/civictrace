@@ -197,7 +197,7 @@ export default function HearingAnalyzer({
   async function handleImportVideo() {
     if (!caseId) {
       setError(
-        "Upload a policy document first so the hearing can be attached to the current CivicTrace case."
+        "Upload a policy document first so the hearing can be attached to the current TRACE case."
       );
 
       return;
@@ -398,7 +398,7 @@ export default function HearingAnalyzer({
           Import a public hearing
           from YouTube or paste
           testimony manually.
-          CivicTrace analyzes the
+          TRACE analyzes the
           hearing and adds the
           evidence to the current
           policy case.
@@ -413,7 +413,7 @@ export default function HearingAnalyzer({
 
           <p className="mt-1 text-sm leading-6 text-slate-600">
             Enter a public hearing
-            YouTube URL. CivicTrace
+            YouTube URL. TRACE
             will load the available
             transcript and place it
             in the hearing workspace
@@ -460,7 +460,7 @@ export default function HearingAnalyzer({
           <p className="mt-3 text-sm text-amber-700">
             Upload a policy
             document first to
-            create a CivicTrace
+            create a TRACE
             case.
           </p>
         )}

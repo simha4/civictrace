@@ -1,4 +1,4 @@
-# CivicTrace
+# TRACE
 
 **Evidence-grounded policy and public sentiment analysis using Microsoft Foundry, Azure AI Search, and Azure Document Intelligence.**
 
